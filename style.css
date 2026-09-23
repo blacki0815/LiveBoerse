@@ -10,7 +10,8 @@
   --radius:10px; font-family: Arial, Helvetica, sans-serif;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink)}
+html,body{margin:0;background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
+button,input,select,.seg,.poll{touch-action:manipulation}
 button{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:.7em 1.1em;font-weight:700;background:var(--buy);color:#fff}
 button.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line)}
 button:disabled{opacity:.4;cursor:default}
@@ -39,9 +40,27 @@ input,select{font:inherit;padding:.55em .7em;border:1.5px solid var(--line);bord
 .news h3{margin:.2em 0;font-size:1.2rem}
 .news p{margin:.3em 0 0;font-size:.95rem}
 .act h3{margin:0 0 4px;font-size:1.05rem}
-.stepper{display:flex;align-items:center;gap:10px;justify-content:center;margin:14px 0}
-.stepper button{width:56px;height:56px;font-size:1.5rem;padding:0}
-.stepper input{width:130px;text-align:center;font-size:1.8rem;font-weight:800}
+.stepper{display:flex;align-items:center;gap:14px;justify-content:center;margin:10px 0 14px}
+.stepper button{width:64px;height:48px;font-size:1.4rem;padding:0}
+.bid{text-align:center;font-size:2.6rem;font-weight:800;margin:6px 0 2px;line-height:1}
+.bid .per{font-size:1.1rem;color:var(--muted);font-weight:700}
+.scalewrap{margin:6px 2px 0}
+.scalewrap input[type=range]{width:100%;accent-color:var(--buy);padding:0;border:0;height:34px}
+.marks{position:relative;height:34px;margin-top:-2px}
+.mark{position:absolute;transform:translateX(-50%);font-size:.7rem;color:var(--muted);white-space:nowrap;text-align:center}
+.mark i{display:block;width:2px;height:10px;background:var(--muted);margin:0 auto 2px}
+.mark.lim{font-weight:700}
+.mark.lim.buy{color:var(--buy)} .mark.lim.buy i{background:var(--buy)}
+.mark.lim.sell{color:var(--sell)} .mark.lim.sell i{background:var(--sell)}
+.meters{display:grid;gap:8px;margin:10px 0}
+.meters .mk{font-size:.8rem;color:var(--muted);margin-bottom:3px}
+.mtrack{height:10px;background:var(--bg);border-radius:99px;overflow:hidden}
+.mfill{height:100%;transition:width .2s}
+.mfill.buy{background:var(--buy)} .mfill.sell{background:var(--sell)}
+.expl{font-size:.9rem;line-height:1.45;background:var(--bg);border-radius:8px;padding:10px 12px;margin:10px 0}
+.expl.warn{background:var(--sell-soft);color:var(--ink);font-weight:600}
+.calc{font-size:.95rem;margin:.6em 0 .2em}
+.ref{font-size:.8rem;color:var(--muted);margin:10px 0 0}
 .full{width:100%;padding:.95em;font-size:1.05rem}
 .hint{font-size:.85rem;color:var(--muted);text-align:center;min-height:1.1em;margin:4px 0 10px}
 .hint.warn{color:var(--sell);font-weight:700}
