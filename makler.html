@@ -237,7 +237,6 @@ function vTrading(ps, os) {
     <div class="count">${done} <span class="muted" style="font-weight:400">/ ${ps.length}</span></div>
     <div class="progress"><div style="width:${ps.length ? done / ps.length * 100 : 0}%"></div></div>
     <p class="lead">Die Preise bleiben geheim, bis der Makler das Orderbuch öffnet.</p></div>
-    <div class="qr-corner"><div class="qr" style="padding:8px"><div id="qr"></div></div><div>${code}</div></div>`;
 }
 function vTable(os, best) {
   const rows = bookTable(os);
