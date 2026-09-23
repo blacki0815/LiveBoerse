@@ -59,6 +59,10 @@ function createLocalStore() {
   };
 }
 
+// ---------- Preis-Orientierung ----------
+export const REF_PRICE = 200;      // Vorjahresdurchschnitt, dient allen als Anker
+export const SCALE_MIN = 60, SCALE_MAX = 360;
+
 // ---------- Rollen ----------
 const BUY_P = [300, 160, 240, 200, 120, 280, 180, 260, 140, 220, 320, 190, 250, 170, 230, 150, 270, 210, 130, 290];
 const SELL_P = [100, 240, 160, 200, 280, 120, 220, 140, 260, 180, 80, 210, 150, 230, 170, 250, 110, 190, 270, 130];
@@ -92,35 +96,35 @@ export const EVENTS = {
   duerre: {
     title: 'Dürre in Osteuropa!', sub: 'Die Weizenernte bricht ein – die Höfe haben nur noch halb so viel Weizen.',
     side: 'seller', effect: 'Angebot sinkt', shift: 'Angebotskurve verschiebt sich nach links',
-    card: 'Deine Ernte hat sich halbiert.', apply: p => ({ ...p, qty: Math.max(10, Math.round(p.qty / 20) * 10) }),
+    card: 'Deine Ernte hat sich halbiert.', apply: p => ({ ...p, qty: Math.max(10, Math.round(Number(p.qty) / 20) * 10) }),
     rumor: 'Wetterdienste melden extreme Trockenheit in Osteuropa. Eine Missernte scheint sicher …',
     answer: 'up'
   },
   grossauftrag: {
     title: 'Riesen-Großauftrag!', sub: 'Eine Bäckereikette eröffnet 200 neue Filialen – alle Käufer brauchen 20 t mehr.',
     side: 'buyer', effect: 'Nachfrage steigt', shift: 'Nachfragekurve verschiebt sich nach rechts',
-    card: 'Du brauchst 20 t mehr Weizen als bisher.', apply: p => ({ ...p, qty: p.qty + 20 }),
+    card: 'Du brauchst 20 t mehr Weizen als bisher.', apply: p => ({ ...p, qty: Number(p.qty) + 20 }),
     rumor: 'Man munkelt, eine große Bäckereikette plant eine gewaltige Expansion …',
     answer: 'up'
   },
   rekordernte: {
     title: 'Rekordernte!', sub: 'Perfektes Wetter: Jeder Hof erntet 20 t mehr als geplant.',
     side: 'seller', effect: 'Angebot steigt', shift: 'Angebotskurve verschiebt sich nach rechts',
-    card: 'Du hast 20 t mehr Weizen geerntet.', apply: p => ({ ...p, qty: p.qty + 20 }),
+    card: 'Du hast 20 t mehr Weizen geerntet.', apply: p => ({ ...p, qty: Number(p.qty) + 20 }),
     rumor: 'Die Satellitenbilder zeigen: Die Felder stehen so gut wie seit Jahren nicht …',
     answer: 'down'
   },
   lowcarb: {
     title: 'Low-Carb-Trend!', sub: 'Influencer verteufeln Brot und Nudeln – die Käufer brauchen nur noch halb so viel.',
     side: 'buyer', effect: 'Nachfrage sinkt', shift: 'Nachfragekurve verschiebt sich nach links',
-    card: 'Du brauchst nur noch halb so viel Weizen.', apply: p => ({ ...p, qty: Math.max(10, Math.round(p.qty / 20) * 10) }),
+    card: 'Du brauchst nur noch halb so viel Weizen.', apply: p => ({ ...p, qty: Math.max(10, Math.round(Number(p.qty) / 20) * 10) }),
     rumor: 'Ein riesiger Ernährungs-Trend gegen Brot und Nudeln rollt auf Deutschland zu …',
     answer: 'down'
   },
   duenger: {
     title: 'Düngerpreise explodieren!', sub: 'Die Produktionskosten steigen – jeder Hof braucht mindestens 60 € mehr pro Tonne.',
     side: 'seller', effect: 'Angebot sinkt (Kosten steigen)', shift: 'Angebotskurve verschiebt sich nach oben/links',
-    card: 'Deine Kosten sind gestiegen: Mindestpreis +60 €/t.', apply: p => ({ ...p, value: p.value + 60 }),
+    card: 'Deine Kosten sind gestiegen: Mindestpreis +60 €/t.', apply: p => ({ ...p, value: Number(p.value) + 60 }),
     rumor: 'Aus der Chemiebranche hört man: Dünger wird bald drastisch teurer …',
     answer: 'up'
   },
@@ -134,7 +138,7 @@ export function effective(player, eventId) {
 
 // ---------- Markt: Meistausführungsprinzip ----------
 export function listOrders(ordersObj) {
-  return Object.entries(ordersObj || {}).map(([pid, o]) => ({ pid, ...o }));
+  return Object.entries(ordersObj || {}).map(([pid, o]) => ({ pid, ...o, price: Number(o.price) || 0, qty: Number(o.qty) || 0 }));
 }
 export function supplyAt(orders, p) { return orders.filter(o => o.role === 'seller' && o.price <= p).reduce((s, o) => s + o.qty, 0); }
 export function demandAt(orders, p) { return orders.filter(o => o.role === 'buyer' && o.price >= p).reduce((s, o) => s + o.qty, 0); }
@@ -175,3 +179,10 @@ export const eur = v => (v == null ? '–' : v.toLocaleString('de-DE') + ' €')
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 export function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+
+// "Schöne" Achsenschritte, damit die Beschriftung nie gequetscht wird (ca. 6–8 Striche)
+export function niceStep(max, target = 7) {
+  const raw = max / target, mag = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+  for (const f of [1, 2, 2.5, 5, 10]) if (f * mag >= raw) return f * mag;
+  return 10 * mag;
+}
