@@ -216,6 +216,7 @@ function vLobby(ps) {
   const c = r => ps.filter(p => p.role === r).length;
   return `<div class="lobby"><div class="qr"><div id="qr"></div></div><div>
     <div class="eyebrow">HANDY RAUS · SCANNEN · MITHANDELN</div>
+    <div class="code" style="margin:2vh 0 1vh">${code}</div>
     <p class="lead">${esc(joinUrl().replace(/^https?:\/\//, ''))}</p>
     <div style="margin-top:5vh"><span class="count">${ps.length}</span> <span class="lead" style="display:inline">Händler dabei</span></div>
     <p class="lead" style="margin-top:1vh">${c('buyer')} Käufer · ${c('seller')} Verkäufer · ${c('spec')} Spekulanten</p>
@@ -235,7 +236,323 @@ function vTrading(ps, os) {
   return `<div class="center-col"><div class="eyebrow">RUNDE ${meta.round}</div><div class="h1">Handel läuft – gebt eure Aufträge ab!</div>
     <div class="count">${done} <span class="muted" style="font-weight:400">/ ${ps.length}</span></div>
     <div class="progress"><div style="width:${ps.length ? done / ps.length * 100 : 0}%"></div></div>
-    <p class="lead">Die Preise bleiben geheim, bis der Makler das Orderbuch öffnet.</p></div>`;
+    <p class="lead">Die Preise bleiben geheim, bis der Makler das Orderbuch öffnet.</p></div>
+    <div class="qr-corner"><div class="qr" style="padding:8px"><div id="qr"></div></div><div>${code}</div></div>`;
+}
+function vTable(os, best) {
+  const rows = bookTable(os);
+  const bestRow = rows.find(r => r.price === best);
+  const ties = bestRow ? rows.filter(r => r.volume === bestRow.volume).length : 0;
+  const note = best != null && ties > 1 ? `<p class="muted" style="text-align:center;margin:0">Mehrere Preise erreichen ${bestRow.volume} t – der Makler wählt den, bei dem der Überhang am kleinsten ist (bei Gleichstand den mittleren).</p>` : '';
+  return `<div><div class="eyebrow">ORDERBUCH · RUNDE ${meta.round}</div><div class="h1">${best != null ? `Börsenpreis: ${best} €/t` : 'Bei welchem Preis wird am meisten umgesetzt?'}</div>
+    ${best != null ? `<p class="lead" style="margin-top:.4em">Hier wird die größte Menge umgesetzt: <b style="color:var(--ink)">${bestRow ? bestRow.volume : ''} t</b></p>` : ''}</div>
+    <div class="tablewrap"><table class="book"><thead><tr><th>Preis €/t</th><th>Angebot t</th><th>Nachfrage t</th><th>umsetzbar t</th></tr></thead><tbody>
+    ${rows.map(r => `<tr class="${best === r.price ? 'best' : ''}"><td>${r.price}</td><td>${r.supply}</td><td>${r.demand}</td><td>${r.volume}</td></tr>`).join('')}</tbody></table></div>${note}`;
+}
+function vChart(os, res) {
+  const R = meta.round, prev = R > 1 ? roundOrders(R - 1) : null, rows = bookTable(os);
+  // Vor dem Aufdecken: nur die Kurven, keine Preislinie und kein Regler
+  if (!res) sliderP = null;
+  else if (sliderP == null) sliderP = res.price;
+  const minP = rows.length ? rows[0].price - 20 : 0, maxP = rows.length ? rows[rows.length - 1].price + 20 : 400;
+  const ev = EVENTS[meta.event], pv = Object.values(polls[R] || {});
+  const hit = ev && pv.length ? `<div><div class="k">PROGNOSE RICHTIG</div><div class="v">${Math.round(pv.filter(x => x === ev.answer).length / pv.length * 100)} %</div></div>` : '';
+  const head = res ? `<div class="result-strip"><div><div class="k">GLEICHGEWICHTSPREIS</div><div class="v">${eur(res.price)}/t</div></div><div><div class="k">GLEICHGEWICHTSMENGE</div><div class="v">${res.volume} t</div></div>${hit}${ev ? `<div class="lead" style="align-self:center">${esc(ev.shift)}</div>` : ''}</div>`
+    : `<div><div class="eyebrow">RUNDE ${R}</div><div class="h1">Angebot und Nachfrage</div></div>`;
+  return head + `<div class="chartbox"><div class="legend"><span class="b">— Nachfrage</span><span class="s">— Angebot</span>${prev && prev.length ? `<span class="muted">- - Runde ${R - 1}</span>` : ''}</div>
+    <div id="chart">${chartSVG(os, prev, res, sliderP)}</div>
+    ${res ? `<div class="sliderrow"><span class="muted">Makler-Preis testen</span><input type="range" id="slider" min="${minP}" max="${maxP}" step="10" value="${sliderP}"><b id="sp">${sliderP} €</b><span class="gapinfo" id="gap">${gapText(os, sliderP)}</span></div>` : `<p class="muted" style="margin:8px 0 0">Wo schneiden sich die Kurven? Aufdecken mit Leertaste.</p>`}</div>`;
+}
+function vBoard() {
+  const ps = playerList(), lp = lastPrice() || 0;
+  const tr = ps.filter(p => p.role !== 'spec').map(p => ({ name: p.name, v: Object.values(results).reduce((s, r) => s + ((r.gains || {})[p.pid] || 0), 0) })).sort((a, b) => b.v - a.v).slice(0, 5);
+  const sp = ps.filter(p => p.role === 'spec').map(p => ({ name: p.name, v: (p.cash || 0) + (p.inv || 0) * lp })).sort((a, b) => b.v - a.v);
+  return `<div><div class="eyebrow">RANGLISTE</div><div class="h1">Wer hat am besten gehandelt?</div></div>
+    <div class="boards"><div class="board"><h2>Händler</h2><ol>${tr.map(t => `<li>${esc(t.name)} <b>${eur(t.v)}</b></li>`).join('')}</ol></div>
+    <div class="board"><h2>Spekulanten</h2><ol>${sp.map(t => `<li>${esc(t.name)} <b>${eur(t.v)}</b></li>`).join('') || '<li class="muted">keine</li>'}</ol></div></div>`;
+}
+
+function render() {
+  if (!meta) return;
+  const ps = playerList(), R = meta.round, ph = meta.phase, os = roundOrders(R), ev = EVENTS[meta.event], res = ph === 'result' ? results[R] : null;
+  $('roundinfo').textContent = ph === 'lobby' ? '' : `Runde ${R}` + (ev ? ` · ${ev.title}` : '');
+  let v = view;
+  if (!v) v = (ph === 'closed' || ph === 'result') ? 'table' : null;
+  curView = v;
+  let h;
+  if (ph === 'lobby') h = vLobby(ps);
+  else if (ph === 'news') h = vNews(ev, R, false);
+  else if (ph === 'trading') h = vTrading(ps, os);
+  else if (v === 'board') h = vBoard();
+  else if (v === 'table') h = vTable(os, res ? res.price : null);
+  else h = vChart(os, res);
+  $('stage').innerHTML = h;
+  const qr = $('qr');
+  if (qr && window.QRCode) new QRCode(qr, { text: joinUrl(), width: ph === 'lobby' ? 360 : 120, height: ph === 'lobby' ? 360 : 120, correctLevel: QRCode.CorrectLevel.M });
+  const bestTr = document.querySelector('tr.best'), wrap = document.querySelector('.tablewrap');
+  if (bestTr && wrap) wrap.scrollTop = Math.max(0, bestTr.offsetTop - wrap.clientHeight / 2);
+  const sl = $('slider');
+  if (sl) sl.oninput = () => { sliderP = Number(sl.value); $('chart').innerHTML = chartSVG(os, R > 1 ? roundOrders(R - 1) : null, res, sliderP); $('gap').innerHTML = gapText(os, sliderP); $('sp').textContent = sliderP + ' €'; bindHover(); };
+  bindHover();
+  renderDock(ph, v);
+}
+
+// --------------------------- Steuerleiste ---------------------------
+function renderDock(ph, v) {
+  const next = ph === 'result' && v === 'table' ? 'Zum Diagramm' : { lobby: 'Handel eröffnen', news: 'Handel eröffnen', trading: 'Handel schließen', closed: 'Aufdecken', result: 'Nächste Runde' }[ph];
+  const os = roundOrders(meta.round), ps = playerList();
+  let d = `<span class="info">${ph === 'trading' ? `${new Set(os.map(o => o.spec ? o.owner : o.pid)).size}/${ps.length} Aufträge` : `${ps.length} Händler`}</span>`;
+  if (ph === 'closed' || ph === 'result') d += ['table', 'chart'].concat(ph === 'result' ? ['board'] : []).map(k => `<button class="ghost" data-view="${k}" style="${v === k ? 'border-color:var(--buy);color:var(--buy)' : ''}">${{ table: 'Orderbuch', chart: 'Diagramm', board: 'Rangliste' }[k]}</button>`).join('');
+  if (ph === 'result' && v !== 'table') d += `<select id="evSel">${Object.entries(EVENTS).map(([k, e]) => `<option value="${k}" ${k === (evChoice ?? meta.nextEvent) ? 'selected' : ''}>${esc(e.title)}</option>`).join('')}<option value="" ${evChoice === '' ? 'selected' : ''}>ohne Ereignis</option></select>`;
+  d += `<button id="go">${next} ▸</button><button class="ghost" id="toolsBtn" title="Werkzeuge (W)">⋯</button>`;
+  $('dock').innerHTML = d;
+  $('go').onclick = step;
+  if ($('evSel')) $('evSel').onchange = e => { evChoice = e.target.value; };
+  $('toolsBtn').onclick = openTools;
+  document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view; render(); });
+}
+let hideT;
+function wake() { $('dock').classList.remove('hide'); clearTimeout(hideT); hideT = setTimeout(() => { if (!$('dock').matches(':hover')) $('dock').classList.add('hide'); }, 2500); }
+document.addEventListener('mousemove', wake); wake();
+
+function openTools() {
+  $('nextEv').innerHTML = Object.entries(EVENTS).map(([k, e]) => `<option value="${k}" ${meta.nextEvent === k ? 'selected' : ''}>${esc(e.title)}</option>`).join('');
+  $('tools').classList.add('open');
+}
+$('closeTools').onclick = () => $('tools').classList.remove('open');
+$('nextEv').onchange = () => setMeta({ nextEvent: $('nextEv').value });
+$('bots6').onclick = () => addBots(6);
+$('bots20').onclick = () => addBots(20);
+$('newSession').onclick = () => { if (confirm('Neue Börse starten? Alle müssen neu scannen.')) newSession(); };
+$('mAdd').onclick = async () => {
+  const role = $('mRole').value, price = Math.round(Number($('mPrice').value) / 10) * 10, qty = Number($('mQty').value);
+  if (!(price > 0 && qty > 0)) { $('mInfo').textContent = 'Preis und Menge angeben'; return; }
+  await store.set(`${S()}/orders/${meta.round}/manual${Date.now()}`, { price, qty, role, name: 'Papier', ts: Date.now(), manual: true });
+  $('mInfo').textContent = `Eingetragen: ${role === 'buyer' ? 'Kauf' : 'Verkauf'} ${qty} t zu ${price} €`;
+  $('mPrice').value = ''; $('mQty').value = '';
+};
+
+if (!code || !(await store.get('sessions/' + code + '/meta'))) await newSession(); else attach();
+
+document.addEventListener('keydown', e => {
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ') { e.preventDefault(); step(); }
+  if (k === 'f') document.documentElement.requestFullscreen?.();
+  if (k === 'w') $('tools').classList.contains('open') ? $('tools').classList.remove('open') : openTools();
+  if (meta && (meta.phase === 'closed' || meta.phase === 'result')) {
+    if (k === 't') { view = 'table'; render(); }
+    if (k === 'd') { view = 'chart'; render(); }
+    if (k === 'r' && meta.phase === 'result') { view = 'board'; render(); }
+  }
+});
+</script>
+</body>
+</html>
+const $ = id => document.getElementById(id);
+const store = await createStore();
+if (store.mode === 'local') $('localbanner').innerHTML = '<div class="banner-local">Lokaler Testmodus – für echte Handys Firebase eintragen (README)</div>';
+store.onConnection(ok => { $('conn').textContent = ok ? 'verbunden' : 'keine Verbindung …'; $('conn').className = 'conn' + (ok ? '' : ' off'); });
+
+let code = lsGet('lb-host-code');
+let meta = null, players = {}, orders = {}, polls = {}, results = {};
+let chartGeo = null, sliderP = null, drawnKey = '', view = null, evChoice = null, curView = null; // view: null = automatisch, sonst 'table' | 'chart' | 'board'
+
+const S = () => 'sessions/' + code;
+const joinUrl = () => new URL('index.html?s=' + code, location.href).href;
+const roundOrders = r => listOrders(orders[r]);
+const playerList = () => Object.entries(players).map(([pid, p]) => ({ pid, ...p }));
+const lastPrice = () => Object.keys(results).map(Number).sort((a, b) => b - a).map(k => results[k].price).find(p => p != null);
+const setMeta = obj => store.update(S() + '/meta', obj);
+
+async function newSession() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  code = Array.from({ length: 4 }, () => A[Math.floor(Math.random() * A.length)]).join('');
+  await store.set('sessions/' + code, { meta: { phase: 'lobby', round: 1, event: '', nextEvent: 'duerre', created: Date.now() }, counter: 0 });
+  lsSet('lb-host-code', code);
+  location.reload();
+}
+function attach() {
+  store.on(S() + '/meta', v => { meta = v; render(); });
+  store.on(S() + '/players', v => { players = v || {}; render(); });
+  store.on(S() + '/orders', v => { orders = v || {}; render(); });
+  store.on(S() + '/polls', v => { polls = v || {}; render(); });
+  store.on(S() + '/results', v => { results = v || {}; render(); });
+}
+
+// --------------------------- Ablauf ---------------------------
+async function openTrading() { view = null; await setMeta({ phase: 'trading' }); await botOrders(); }
+async function closeTrading() { view = null; sliderP = null; await setMeta({ phase: 'closed' }); }
+async function reveal() {
+  const R = meta.round, os = roundOrders(R), c = clear(os);
+  sliderP = c.price; view = null;
+  const gains = {}, pupd = {};
+  for (const o of os) {
+    if (o.spec) continue;
+    const p = players[o.pid];
+    gains[o.pid] = gainFor(p ? p.role : o.role, p ? effective(p, meta.event).value : o.price, c.price, c.fills[o.pid] || 0);
+  }
+  if (!results[R] || !results[R].applied) {
+    for (const [pid, p] of Object.entries(players)) {
+      if (p.role !== 'spec') continue;
+      const fb = c.fills[pid + '__b'] || 0, fs = c.fills[pid + '__s'] || 0;
+      if (!fb && !fs) continue;
+      pupd[pid + '/inv'] = (p.inv || 0) + fb - fs;
+      pupd[pid + '/cash'] = (p.cash || 0) + (c.price || 0) * (fs - fb);
+    }
+    if (Object.keys(pupd).length) await store.update(S() + '/players', pupd);
+  }
+  await store.set(S() + '/results/' + R, { price: c.price, volume: c.volume, fills: c.fills, gains, applied: true });
+  await setMeta({ phase: 'result' });
+}
+async function nextRound(eventId) {
+  view = null; sliderP = null;
+  const used = new Set(Object.values(meta.events || {}).concat([eventId]));
+  const next = Object.keys(EVENTS).filter(k => !used.has(k))[0] || '';
+  await setMeta({ round: meta.round + 1, event: eventId || '', nextEvent: next, events: { ...(meta.events || {}), [meta.round + 1]: eventId || '' }, phase: eventId ? 'news' : 'trading' });
+  if (!eventId) await botOrders();
+}
+function step() {
+  if (!meta) return;
+  if (meta.phase === 'lobby' || meta.phase === 'news') openTrading();
+  else if (meta.phase === 'trading') closeTrading();
+  else if (meta.phase === 'closed') reveal();
+  else if (meta.phase === 'result' && curView === 'table') { view = 'chart'; render(); }
+  else if (meta.phase === 'result') { const e = evChoice ?? meta.nextEvent; evChoice = null; nextRound(e); }
+}
+
+// --------------------------- Bots ---------------------------
+async function addBots(n) {
+  for (let i = 0; i < n; i++) {
+    const idx = await store.increment(S() + '/counter');
+    const r = roleForIndex(idx);
+    await store.set(S() + '/players/bot' + idx, { ...r, name: r.name + ' (Bot)', idx, bot: true });
+  }
+  if (meta.phase === 'trading') setTimeout(botOrders, 300);
+}
+async function botOrders() {
+  const m = await store.get(S() + '/meta'), ps = await store.get(S() + '/players') || {}, upd = {}, lp = lastPrice() || 200;
+  for (const [pid, p] of Object.entries(ps)) {
+    if (!p.bot) continue;
+    if (p.role === 'spec') {
+      const bull = EVENTS[m.nextEvent] && EVENTS[m.nextEvent].answer === 'up';
+      upd[pid + '__b'] = { price: lp + (bull ? 40 : -30), qty: bull ? 40 : 10, role: 'buyer', spec: true, owner: pid, name: p.name, ts: Date.now() };
+      if (p.inv > 0) upd[pid + '__s'] = { price: lp + (bull ? 80 : -10), qty: Math.min(p.inv, bull ? 10 : 20), role: 'seller', spec: true, owner: pid, name: p.name, ts: Date.now() };
+      continue;
+    }
+    const e = effective(p, m.event), n = [0, 0, 10][Math.floor(Math.random() * 3)];
+    upd[pid] = { price: Math.max(10, p.role === 'buyer' ? e.value - n : e.value + n), qty: e.qty, role: p.role, name: p.name, value: e.value, ts: Date.now() };
+  }
+  if (Object.keys(upd).length) await store.update(S() + '/orders/' + m.round, upd);
+}
+
+// --------------------------- Diagramm ---------------------------
+function chartSVG(os, prev, eq, sp) {
+  const W = 1000, H = 520, L = 70, B = 50, T = 24, Rr = 24;
+  const all = os.concat(prev || []);
+  const yMax = Math.ceil((Math.max(250, ...all.map(o => o.price)) + 40) / 50) * 50;
+  const tot = arr => Math.max(supplyAt(arr, 1e9), demandAt(arr, 0));
+  const xMax = Math.max(100, Math.ceil(Math.max(tot(os), tot(prev || [])) * 1.08 / 50) * 50);
+  const X = q => L + q / xMax * (W - L - Rr), Y = p => H - B - p / yMax * (H - B - T);
+  let g = '';
+  for (let p = 0; p <= yMax; p += 50) g += `<line x1="${L}" x2="${W - Rr}" y1="${Y(p)}" y2="${Y(p)}" stroke="#E9EBEE"/><text x="${L - 10}" y="${Y(p) + 5}" text-anchor="end" font-size="15" fill="#6B6F76">${p}</text>`;
+  const xs = xMax <= 300 ? 50 : xMax <= 700 ? 100 : 200;
+  for (let q = xs; q <= xMax; q += xs) g += `<text x="${X(q)}" y="${H - B + 24}" text-anchor="middle" font-size="15" fill="#6B6F76">${q}</text>`;
+  g += `<line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="#1F2328" stroke-width="1.5"/><line x1="${L}" x2="${W - Rr}" y1="${H - B}" y2="${H - B}" stroke="#1F2328" stroke-width="1.5"/>`;
+  g += `<text x="${L - 60}" y="${T - 6}" font-size="14" font-weight="700" fill="#6B6F76">€/t</text><text x="${W - Rr}" y="${H - 6}" text-anchor="end" font-size="14" font-weight="700" fill="#6B6F76">Menge in t</text>`;
+  const path = (arr, role) => {
+    const ps = [...new Set(arr.filter(o => o.role === role).map(o => o.price))].sort((a, b) => role === 'seller' ? a - b : b - a);
+    if (!ps.length) return '';
+    let d = '', q = 0;
+    ps.forEach((p, i) => { d += i === 0 ? `M${X(0)},${Y(p)}` : ` L${X(q)},${Y(p)}`; q += arr.filter(o => o.role === role && o.price === p).reduce((s, o) => s + o.qty, 0); d += ` L${X(q)},${Y(p)}`; });
+    return d + (role === 'seller' ? ` L${X(q)},${Y(yMax)}` : ` L${X(q)},${Y(0)}`);
+  };
+  if (prev && prev.length) {
+    g += `<path d="${path(prev, 'seller')}" class="curve" stroke="#B7791F" stroke-opacity=".35" stroke-dasharray="8 7"/>`;
+    g += `<path d="${path(prev, 'buyer')}" class="curve" stroke="#1E3A5F" stroke-opacity=".35" stroke-dasharray="8 7"/>`;
+  }
+  const anim = drawnKey !== meta.round + meta.phase ? 'draw' : '';
+  drawnKey = meta.round + meta.phase;
+  g += `<path d="${path(os, 'seller')}" class="curve ${anim}" stroke="#B7791F"/><path d="${path(os, 'buyer')}" class="curve ${anim}" stroke="#1E3A5F"/>`;
+  if (sp != null && !(eq && sp === eq.price)) {
+    const s = supplyAt(os, sp), d = demandAt(os, sp);
+    g += `<line x1="${L}" x2="${W - Rr}" y1="${Y(sp)}" y2="${Y(sp)}" stroke="#6B6F76" stroke-width="2" stroke-dasharray="4 4"/>`;
+    if (s !== d) g += `<line x1="${X(Math.min(s, d))}" x2="${X(Math.max(s, d))}" y1="${Y(sp)}" y2="${Y(sp)}" stroke="${s > d ? '#B7791F' : '#1E3A5F'}" stroke-width="12" stroke-opacity=".3"/>`;
+  }
+  if (eq && eq.price != null) {
+    g += `<line x1="${X(eq.volume)}" x2="${X(eq.volume)}" y1="${Y(eq.price)}" y2="${H - B}" stroke="#1F2328" stroke-width="1.5" stroke-dasharray="6 5"/>`;
+    g += `<line x1="${L}" x2="${X(eq.volume)}" y1="${Y(eq.price)}" y2="${Y(eq.price)}" stroke="#1F2328" stroke-width="1.5" stroke-dasharray="6 5"/>`;
+    g += `<circle cx="${X(eq.volume)}" cy="${Y(eq.price)}" r="10" fill="#1F2328" stroke="#fff" stroke-width="3"/>`;
+    g += `<text x="${X(eq.volume) + 16}" y="${Y(eq.price) - 14}" font-size="22" font-weight="800" fill="#1F2328">G</text>`;
+  }
+  chartGeo = { W, H, L, B, T, Rr, yMax, xMax, os };
+  g += `<g id="hov" pointer-events="none"></g><rect id="hovzone" x="${L}" y="${T}" width="${W - L - Rr}" height="${H - B - T}" fill="transparent" style="cursor:crosshair"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Angebots- und Nachfragekurve">${g}</svg>`;
+}
+function gapText(os, p) {
+  const s = supplyAt(os, p), d = demandAt(os, p), res = meta.phase === 'result' ? results[meta.round] : null;
+  if (res && p === res.price) return `<span>Börsenpreis: größter Umsatz (${Math.min(s, d)} t)</span>`;
+  if (s > d) return `<span style="color:var(--sell)">Angebotsüberschuss ${s - d} t → Preis sinkt</span>`;
+  if (d > s) return `<span style="color:var(--buy)">Nachfrageüberschuss ${d - s} t → Preis steigt</span>`;
+  return `<span>Angebot = Nachfrage → Gleichgewicht</span>`;
+}
+
+
+// --------------------------- Hover im Diagramm ---------------------------
+function bindHover() {
+  const svg = document.querySelector('#chart svg'), zone = $('hovzone'), hov = $('hov');
+  if (!svg || !zone || !chartGeo) return;
+  const { W, H, L, B, T, Rr, yMax, xMax, os } = chartGeo;
+  const X = q => L + q / xMax * (W - L - Rr), Y = p => H - B - p / yMax * (H - B - T);
+  const gap = $('gap'), keep = gap ? gap.innerHTML : '';
+  zone.onmousemove = e => {
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const p = Math.max(0, Math.min(yMax, Math.round((H - B - loc.y) / (H - B - T) * yMax / 10) * 10));
+    const s = supplyAt(os, p), d = demandAt(os, p), y = Y(p);
+    const diff = s - d;
+    const msg = diff > 0 ? `Angebotsüberschuss ${diff} t` : diff < 0 ? `Nachfrageüberschuss ${-diff} t` : 'Angebot = Nachfrage';
+    const bx = Math.min(Math.max(loc.x + 18, L + 4), W - Rr - 310), by = y + 16 + 88 < H - B ? y + 16 : Math.max(T + 4, y - 104);
+    hov.innerHTML = `<line x1="${L}" x2="${W - Rr}" y1="${y}" y2="${y}" stroke="#6B6F76" stroke-width="1.5" stroke-dasharray="4 4"/>`
+      + (s !== d ? `<line x1="${X(Math.min(s, d))}" x2="${X(Math.max(s, d))}" y1="${y}" y2="${y}" stroke="${diff > 0 ? '#B7791F' : '#1E3A5F'}" stroke-width="12" stroke-opacity=".3"/>` : '')
+      + `<circle cx="${X(s)}" cy="${y}" r="7" fill="#B7791F" stroke="#fff" stroke-width="2"/><circle cx="${X(d)}" cy="${y}" r="7" fill="#1E3A5F" stroke="#fff" stroke-width="2"/>`
+      + `<rect x="${bx}" y="${by}" width="300" height="88" rx="8" fill="#fff" stroke="#D9DCE1"/>`
+      + `<text x="${bx + 14}" y="${by + 26}" font-size="18" font-weight="800" fill="#1F2328">${p} €/t</text>`
+      + `<text x="${bx + 14}" y="${by + 48}" font-size="15" fill="#B7791F" font-weight="700">Angebot ${s} t</text>`
+      + `<text x="${bx + 150}" y="${by + 48}" font-size="15" fill="#1E3A5F" font-weight="700">Nachfrage ${d} t</text>`
+      + `<text x="${bx + 14}" y="${by + 72}" font-size="15" fill="#6B6F76">${msg} · Umsatz ${Math.min(s, d)} t</text>`;
+    if (gap) gap.innerHTML = gapText(os, p);
+  };
+  zone.onmouseleave = () => { hov.innerHTML = ''; if (gap) gap.innerHTML = keep; };
+}
+
+// --------------------------- Ansichten ---------------------------
+function vLobby(ps) {
+  const c = r => ps.filter(p => p.role === r).length;
+  return `<div class="lobby"><div class="qr"><div id="qr"></div></div><div>
+    <div class="eyebrow">HANDY RAUS · SCANNEN · MITHANDELN</div>
+    <div class="code" style="margin:2vh 0 1vh">${code}</div>
+    <p class="lead">${esc(joinUrl().replace(/^https?:\/\//, ''))}</p>
+    <div style="margin-top:5vh"><span class="count">${ps.length}</span> <span class="lead" style="display:inline">Händler dabei</span></div>
+    <p class="lead" style="margin-top:1vh">${c('buyer')} Käufer · ${c('seller')} Verkäufer · ${c('spec')} Spekulanten</p>
+  </div></div>`;
+}
+function vNews(ev, R, showAnswer) {
+  const pv = Object.values(polls[R] || {}), n = Math.max(1, pv.length);
+  return `<div class="bignews"><div class="t">BREAKING NEWS</div><h1>${esc(ev.title)}</h1><p>${esc(ev.sub)}</p></div>
+    <div class="h1" style="font-size:clamp(1.5rem,2.6vw,2.2rem)">Was passiert mit dem Weizenpreis? <span class="muted" style="font-weight:400">${pv.length} Stimmen</span></div>
+    <div class="bars">${[['up', '▲ steigt'], ['same', '● bleibt gleich'], ['down', '▼ sinkt']].map(([k, l]) => {
+      const c = pv.filter(v => v === k).length;
+      return `<div class="pbar ${showAnswer && ev.answer === k ? 'correct' : ''}"><div class="l"><span>${l}</span><span>${c}</span></div><div class="track"><div class="fill" style="width:${c / n * 100}%"></div></div></div>`;
+    }).join('')}</div>`;
+}
+function vTrading(ps, os) {
+  const done = new Set(os.map(o => o.spec ? o.owner : o.pid)).size;
+  return `<div class="center-col"><div class="eyebrow">RUNDE ${meta.round}</div><div class="h1">Handel läuft – gebt eure Aufträge ab!</div>
+    <div class="count">${done} <span class="muted" style="font-weight:400">/ ${ps.length}</span></div>
+    <div class="progress"><div style="width:${ps.length ? done / ps.length * 100 : 0}%"></div></div>
+    <p class="lead">Die Preise bleiben geheim, bis der Makler das Orderbuch öffnet.</p></div>
+    <div class="qr-corner"><div class="qr" style="padding:8px"><div id="qr"></div></div><div>${code}</div></div>`;
 }
 function vTable(os, best) {
   const rows = bookTable(os);
