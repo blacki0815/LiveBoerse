@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Live-Börse</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -12,7 +12,7 @@
 <main class="phone" id="app"><div class="wait"><div class="spinner"></div>Lade …</div></main>
 
 <script type="module">
-import { createStore, roleForIndex, EVENTS, effective, eur, esc, lsGet, lsSet } from './shared.js';
+import { createStore, roleForIndex, EVENTS, effective, eur, esc, lsGet, lsSet, REF_PRICE, SCALE_MIN, SCALE_MAX } from './shared.js';
 
 const app = document.getElementById('app');
 let code = (new URLSearchParams(location.search).get('s') || '').toUpperCase().trim();
@@ -60,6 +60,48 @@ async function loadMine() {
   render();
 }
 
+
+const anchor = () => lastPrice() || REF_PRICE;
+const refLine = () => lastPrice()
+  ? `Zur Orientierung: Letzter Börsenpreis <b>${lastPrice()} €/t</b> · Vorjahr ${REF_PRICE} €/t`
+  : `Zur Orientierung: Weizen kostete im Vorjahr im Schnitt <b>${REF_PRICE} €/t</b>`;
+const clamp01 = x => Math.max(0, Math.min(1, x));
+const pct = x => Math.round(clamp01(x) * 100);
+
+// Preis-Skala mit Markierungen (eigenes Limit, Orientierungspreis)
+function scale(bid, limit, isBuyer) {
+  const pos = p => ((Math.max(SCALE_MIN, Math.min(SCALE_MAX, p)) - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
+  const a = anchor();
+  return `<div class="scalewrap">
+    <input type="range" id="price" min="${SCALE_MIN}" max="${SCALE_MAX}" step="10" value="${bid}">
+    <div class="marks">
+      <span class="mark ref" style="left:${pos(a)}%"><i></i>${lastPrice() ? 'letzter Preis' : 'Vorjahr'} ${a} €</span>
+      <span class="mark lim ${isBuyer ? 'buy' : 'sell'}" style="left:${pos(limit)}%"><i></i>dein Limit ${limit} €</span>
+    </div></div>`;
+}
+
+function meters(bid, limit, isBuyer) {
+  const a = anchor();
+  // Chance: Käufer kommen mit hohem Gebot zum Zug, Verkäufer mit niedriger Forderung
+  const chance = isBuyer ? clamp01((bid - (a - 60)) / 120) : clamp01(((a + 60) - bid) / 120);
+  const per = isBuyer ? limit - bid : bid - limit;              // Gewinn pro Tonne
+  const gain = clamp01(per / 120);
+  return `<div class="meters">
+    <div><div class="mk">Chance, zum Zug zu kommen</div><div class="mtrack"><div class="mfill buy" style="width:${pct(chance)}%"></div></div></div>
+    <div><div class="mk">Gewinn pro Tonne${per > 0 ? `: ${per} €` : ''}</div><div class="mtrack"><div class="mfill sell" style="width:${pct(gain)}%"></div></div></div>
+  </div>`;
+}
+
+function explain(bid, eff, isBuyer) {
+  const a = anchor(), q = eff.qty, lim = eff.value;
+  if (isBuyer && bid > lim) return `<p class="expl warn">Über deinem Höchstpreis von ${lim} €: Wird der Börsenpreis höher als ${lim} €, machst du Verlust.</p>`;
+  if (!isBuyer && bid < lim) return `<p class="expl warn">Unter deinem Mindestpreis von ${lim} €: Wird der Börsenpreis niedriger als ${lim} €, machst du Verlust.</p>`;
+  const ex = isBuyer ? Math.min(bid, a) : Math.max(bid, a);
+  const per = isBuyer ? lim - ex : ex - lim;
+  return `<p class="expl">Du ${isBuyer ? 'kaufst' : 'verkaufst'} ${q} t, wenn der Börsenpreis ${isBuyer ? 'höchstens' : 'mindestens'} <b>${bid} €</b> ist.<br>
+    Beispiel: Wird er <b>${ex} €</b>, ${isBuyer ? 'sparst' : 'verdienst'} du ${per} € pro Tonne → <b>${eur(per * q)}</b>.</p>`;
+}
+
 const total = () => Object.values(results).reduce((s, r) => s + ((r.gains || {})[pid] || 0), 0);
 const lastPrice = () => Object.keys(results).map(Number).sort((a, b) => b - a).map(k => results[k].price).find(p => p != null);
 
@@ -76,7 +118,8 @@ function roleCard(eff) {
   return `<div class="card"><div class="role"><div><div class="lab ${r}">${lab}</div><h2>${esc(me.name)}</h2></div>
     ${t ? `<div class="score">Punkte<b>${eur(t)}</b></div>` : ''}</div>
     <div class="limit"><div><div class="k">${r === 'buyer' ? 'Du willst kaufen' : 'Du willst verkaufen'}</div><div class="v">${eff.qty} t</div></div>
-    <div class="secret"><div class="k">${r === 'buyer' ? 'Höchstpreis (geheim)' : 'Mindestpreis (geheim)'}</div><div class="v">${eff.value} €/t</div></div></div></div>`;
+    <div class="secret"><div class="k">${r === 'buyer' ? 'Höchstpreis (geheim)' : 'Mindestpreis (geheim)'}</div><div class="v">${eff.value} €/t</div></div></div>
+    <p class="ref">${refLine()}</p></div>`;
 }
 
 function newsCard(ev, affected) {
@@ -112,31 +155,42 @@ function render() {
 
 function traderForm(eff) {
   const buyer = me.role === 'buyer';
-  if (draft == null) draft = myOrder ? myOrder.price : eff.value;
+  if (draft == null) draft = myOrder ? myOrder.price : (buyer ? Math.min(eff.value, anchor()) : Math.max(eff.value, anchor()));
   return `<div class="card act"><h3>${buyer ? 'Wie viel bietest du höchstens?' : 'Wie viel verlangst du mindestens?'}</h3>
-    <div class="stepper"><button class="ghost" data-d="-10">−</button><input id="price" type="number" inputmode="numeric" step="10" value="${draft}"><button class="ghost" data-d="10">+</button></div>
-    <div class="hint" id="hint">€ pro Tonne</div>
+    <div class="bid"><span id="bid">${draft}</span> €<span class="per">/t</span></div>
+    ${scale(draft, eff.value, buyer)}
+    <div class="stepper"><button class="ghost" data-d="-10">−</button><button class="ghost" data-d="10">+</button></div>
+    ${meters(draft, eff.value, buyer)}
+    ${explain(draft, eff, buyer)}
     <button class="full" id="send">${myOrder ? 'Auftrag ändern' : 'Auftrag abschicken'}</button>
-    ${myOrder ? `<p class="ok">Abgegeben: ${myOrder.price} €/t</p>` : ''}</div>`;
+    ${myOrder ? `<p class="ok">Abgegeben: ${myOrder.price} €/t für ${myOrder.qty} t</p>` : ''}</div>`;
 }
 
 function traderResult() {
   const r = results[meta.round] || {}, f = (r.fills || {})[pid] || 0, g = (r.gains || {})[pid] || 0;
-  let m;
-  if (!myOrder) m = `<p class="muted">Kein Auftrag abgegeben.</p>`;
-  else if (!f) m = `<p><b>Nicht ausgeführt.</b> Dein Preis passte nicht zum Börsenpreis.</p>`;
-  else m = `<p style="margin-bottom:0">Ausgeführt: <b>${f} t</b> · ${me.role === 'buyer' ? 'Ersparnis' : 'Mehreinnahme'}</p><div class="big ${g >= 0 ? 'pos' : 'neg'}">${g >= 0 ? '+' : ''}${eur(g)}</div>`;
-  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${eur(r.price)}/t</div>${m}</div>`;
+  const buyer = me.role === 'buyer', lim = effective(me, meta.event).value, per = buyer ? lim - r.price : r.price - lim;
+  let m2;
+  if (!myOrder) m2 = `<p class="muted">Kein Auftrag abgegeben.</p>`;
+  else if (!f) m2 = `<p><b>Nicht ausgeführt.</b> ${buyer ? `Du wolltest höchstens ${myOrder.price} € zahlen, der Börsenpreis lag darüber.` : `Du wolltest mindestens ${myOrder.price} € haben, der Börsenpreis lag darunter.`}</p>`;
+  else m2 = `<p>Ausgeführt: <b>${f} t</b> zu je ${r.price} €</p>
+    <p class="calc">${buyer ? 'Dein Höchstpreis' : 'Börsenpreis'} ${buyer ? lim : r.price} € − ${buyer ? r.price : lim} € = <b>${per} €</b> pro Tonne<br>
+    ${per} € × ${f} t = </p><div class="big ${g >= 0 ? 'pos' : 'neg'}">${g >= 0 ? '+' : ''}${eur(g)}</div>
+    <p class="muted" style="margin:0">${buyer ? 'so viel hast du gegenüber deinem Limit gespart' : 'so viel hast du über deinem Limit verdient'}</p>`;
+  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${r.price} €/t</div>${m2}</div>`;
 }
 
 function specForm() {
-  const o = spec[side];
-  const d = sdraft[side] || (sdraft[side] = { price: o ? o.price : (lastPrice() || 200), qty: o ? o.qty : (side === 's' ? Math.min(20, me.inv || 0) : 20) });
+  const o = spec[side], a = anchor();
+  const d = sdraft[side] || (sdraft[side] = { price: o ? o.price : a, qty: o ? o.qty : (side === 's' ? Math.min(20, me.inv || 0) : 20) });
   const maxQ = side === 's' ? (me.inv || 0) : 100;
   const sum = ['b', 's'].filter(k => spec[k]).map(k => `${k === 'b' ? 'Kauf' : 'Verkauf'}: ${spec[k].qty} t zu ${spec[k].price} €`).join(' · ');
   return `<div class="card act"><div class="seg"><button data-side="b" class="${side === 'b' ? 'on' : ''}">Kaufen</button><button data-side="s" class="${side === 's' ? 'on' : ''}">Verkaufen</button></div>
-    <div class="stepper"><button class="ghost" data-sd="-10">−</button><input id="sprice" type="number" step="10" value="${d.price}"><button class="ghost" data-sd="10">+</button></div>
-    <div class="hint">€/t · Menge <select id="sqty">${Array.from({ length: Math.floor(maxQ / 10) + 1 }, (_, i) => i * 10).map(q => `<option ${q === d.qty ? 'selected' : ''}>${q}</option>`).join('')}</select> t</div>
+    <div class="bid"><span>${d.price}</span> €<span class="per">/t</span></div>
+    <div class="scalewrap"><input type="range" id="sprice" min="${SCALE_MIN}" max="${SCALE_MAX}" step="10" value="${d.price}">
+      <div class="marks"><span class="mark ref" style="left:${((a - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100}%"><i></i>${lastPrice() ? 'letzter Preis' : 'Vorjahr'} ${a} €</span></div></div>
+    <div class="stepper"><button class="ghost" data-sd="-10">−</button><button class="ghost" data-sd="10">+</button></div>
+    <div class="hint">Menge <select id="sqty">${Array.from({ length: Math.floor(maxQ / 10) + 1 }, (_, i) => i * 10).map(q => `<option ${q === d.qty ? 'selected' : ''}>${q}</option>`).join('')}</select> t</div>
+    <p class="expl">Du verdienst, wenn du billiger kaufst als du später verkaufst. ${side === 'b' ? `Kaufst du ${d.qty} t zu ${d.price} € und steigt der Preis um 50 €, sind das ${eur(50 * d.qty)} Gewinn.` : `Dein Lager: ${me.inv || 0} t.`}</p>
     <button class="full" id="ssend">${o ? 'Ändern' : (side === 'b' ? 'Kaufauftrag abschicken' : 'Verkaufsauftrag abschicken')}</button>
     ${sum ? `<p class="ok">${sum}</p>` : ''}</div>`;
 }
@@ -151,31 +205,33 @@ function bind(eff) {
   const inp = document.getElementById('price');
   if (inp) {
     const buyer = me.role === 'buyer';
-    const check = () => {
-      const p = Number(inp.value); draft = p; const h = document.getElementById('hint');
-      const bad = buyer ? p > eff.value : p < eff.value;
-      h.textContent = bad ? (buyer ? 'Über deinem Höchstpreis – Verlustgefahr!' : 'Unter deinem Mindestpreis – Verlustgefahr!') : '€ pro Tonne';
-      h.className = 'hint' + (bad ? ' warn' : '');
+    const upd = v => {
+      draft = Math.max(SCALE_MIN, Math.min(SCALE_MAX, Math.round(v / 10) * 10));
+      inp.value = draft; document.getElementById('bid').textContent = draft;
+      const card = inp.closest('.card');
+      card.querySelector('.meters').outerHTML = meters(draft, eff.value, buyer);
+      card.querySelector('.expl').outerHTML = explain(draft, eff, buyer);
+      card.querySelectorAll('.mark.lim, .mark.ref').forEach(() => { });
     };
-    inp.oninput = check; check();
-    app.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { inp.value = Math.max(10, Number(inp.value) + Number(b.dataset.d)); check(); });
+    inp.oninput = () => upd(Number(inp.value));
+    app.querySelectorAll('[data-d]').forEach(b => b.onclick = () => upd(draft + Number(b.dataset.d)));
     document.getElementById('send').onclick = async () => {
-      const p = Math.round(Number(inp.value) / 10) * 10;
-      if (!(p > 0 && p <= 1000)) return;
-      myOrder = { price: p, qty: eff.qty, role: me.role, name: me.name, value: eff.value, ts: Date.now() }; draft = p;
+      myOrder = { price: draft, qty: eff.qty, role: me.role, name: me.name, value: eff.value, ts: Date.now() };
       await store.set(`sessions/${code}/orders/${meta.round}/${pid}`, myOrder); render();
     };
   }
   app.querySelectorAll('[data-side]').forEach(b => b.onclick = () => { side = b.dataset.side; render(); });
   const sp = document.getElementById('sprice');
   if (sp) {
-    sp.oninput = () => sdraft[side].price = Number(sp.value);
-    document.getElementById('sqty').onchange = e => sdraft[side].qty = Number(e.target.value);
-    app.querySelectorAll('[data-sd]').forEach(b => b.onclick = () => { sdraft[side].price = Math.max(10, sdraft[side].price + Number(b.dataset.sd)); render(); });
+    const set = v => { sdraft[side].price = Math.max(SCALE_MIN, Math.min(SCALE_MAX, Math.round(v / 10) * 10)); render(); };
+    sp.oninput = () => { sdraft[side].price = Number(sp.value); sp.closest('.card').querySelector('.bid span').textContent = sdraft[side].price; };
+    sp.onchange = () => set(Number(sp.value));
+    document.getElementById('sqty').onchange = e => { sdraft[side].qty = Number(e.target.value); render(); };
+    app.querySelectorAll('[data-sd]').forEach(b => b.onclick = () => set(sdraft[side].price + Number(b.dataset.sd)));
     document.getElementById('ssend').onclick = async () => {
       const d = sdraft[side], path = `sessions/${code}/orders/${meta.round}/${pid}__${side}`;
       if (!d.qty) { spec[side] = null; await store.remove(path); render(); return; }
-      const o = { price: Math.round(d.price / 10) * 10, qty: d.qty, role: side === 'b' ? 'buyer' : 'seller', spec: true, owner: pid, name: me.name, ts: Date.now() };
+      const o = { price: d.price, qty: d.qty, role: side === 'b' ? 'buyer' : 'seller', spec: true, owner: pid, name: me.name, ts: Date.now() };
       spec[side] = o; await store.set(path, o); render();
     };
   }
