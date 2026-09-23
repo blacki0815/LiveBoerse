@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live-Börse</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bar-top"><span class="logo">LIVE-BÖRSE</span><span class="sp"></span><span id="conn" class="conn">verbunden</span></div>
+<div id="localbanner"></div>
+<main class="phone" id="app"><div class="wait"><div class="spinner"></div>Lade …</div></main>
+
+<script type="module">
+import { createStore, roleForIndex, EVENTS, effective, eur, esc, lsGet, lsSet } from './shared.js';
+
+const app = document.getElementById('app');
+let code = (new URLSearchParams(location.search).get('s') || '').toUpperCase().trim();
+let store, me = null, meta = null, results = {}, pid = null, lastRound = null;
+let myOrder = null, myVote = null, draft = null;          // Händler
+let spec = { b: null, s: null }, side = 'b', sdraft = {}; // Spekulanten
+
+store = await createStore();
+if (store.mode === 'local') document.getElementById('localbanner').innerHTML = '<div class="banner-local">Lokaler Testmodus</div>';
+store.onConnection(ok => { const c = document.getElementById('conn'); c.textContent = ok ? 'verbunden' : 'keine Verbindung …'; c.className = 'conn' + (ok ? '' : ' off'); });
+
+if (!code) askCode(); else start();
+
+function askCode() {
+  app.innerHTML = `<div class="card"><h2 style="margin-top:0">Börse beitreten</h2><p class="muted">Code vom Beamer eingeben:</p>
+    <input id="c" maxlength="6" autocomplete="off" style="font-size:2rem;text-align:center;width:100%;text-transform:uppercase;letter-spacing:.2em">
+    <p><button class="full" id="go">Beitreten</button></p></div>`;
+  document.getElementById('go').onclick = () => { code = document.getElementById('c').value.toUpperCase().trim(); if (code) { history.replaceState(null, '', '?s=' + code); start(); } };
+}
+
+async function start() {
+  const S = 'sessions/' + code;
+  if (!(await store.get(S + '/meta'))) { app.innerHTML = `<div class="card"><h2 style="margin-top:0">Code „${esc(code)}“ nicht gefunden</h2><button class="ghost" onclick="location.href='?'">Nochmal</button></div>`; return; }
+  try { pid = sessionStorage.getItem('lb-pid-' + code); } catch (e) { }
+  if (!pid && store.mode !== 'local') pid = lsGet('lb-pid-' + code);
+  if (pid) me = await store.get(S + '/players/' + pid);
+  if (!me) {
+    const idx = await store.increment(S + '/counter');
+    pid = 'p' + idx + '-' + Math.random().toString(36).slice(2, 7);
+    me = { ...roleForIndex(idx), idx, joined: Date.now() };
+    await store.set(S + '/players/' + pid, me);
+    lsSet('lb-pid-' + code, pid);
+    try { sessionStorage.setItem('lb-pid-' + code, pid); } catch (e) { }
+  }
+  store.on(S + '/meta', v => { meta = v; render(); });
+  store.on(S + '/results', v => { results = v || {}; render(); });
+  store.on(S + '/players/' + pid, v => { if (v) { me = v; render(); } });
+}
+
+async function loadMine() {
+  const O = `sessions/${code}/orders/${meta.round}/${pid}`;
+  myOrder = await store.get(O);
+  spec = { b: await store.get(O + '__b'), s: await store.get(O + '__s') };
+  myVote = await store.get(`sessions/${code}/polls/${meta.round}/${pid}`);
+  render();
+}
+
+const total = () => Object.values(results).reduce((s, r) => s + ((r.gains || {})[pid] || 0), 0);
+const lastPrice = () => Object.keys(results).map(Number).sort((a, b) => b - a).map(k => results[k].price).find(p => p != null);
+
+function roleCard(eff) {
+  const r = me.role;
+  const lab = r === 'buyer' ? 'KÄUFER' : r === 'spec' ? 'SPEKULANT' : (me.mega ? 'VERKÄUFER · KONZERN' : 'VERKÄUFER');
+  if (r === 'spec') {
+    const lp = lastPrice() || 200;
+    return `<div class="card"><div class="role"><div><div class="lab spec">${lab}</div><h2>${esc(me.name)}</h2></div>
+      <div class="score">Depotwert<b>${eur((me.cash || 0) + (me.inv || 0) * lp)}</b></div></div>
+      <div class="limit"><div><div class="k">Lager</div><div class="v">${me.inv || 0} t</div></div><div><div class="k">Kasse</div><div class="v">${eur(me.cash || 0)}</div></div></div></div>`;
+  }
+  const t = total();
+  return `<div class="card"><div class="role"><div><div class="lab ${r}">${lab}</div><h2>${esc(me.name)}</h2></div>
+    ${t ? `<div class="score">Punkte<b>${eur(t)}</b></div>` : ''}</div>
+    <div class="limit"><div><div class="k">${r === 'buyer' ? 'Du willst kaufen' : 'Du willst verkaufen'}</div><div class="v">${eff.qty} t</div></div>
+    <div class="secret"><div class="k">${r === 'buyer' ? 'Höchstpreis (geheim)' : 'Mindestpreis (geheim)'}</div><div class="v">${eff.value} €/t</div></div></div></div>`;
+}
+
+function newsCard(ev, affected) {
+  return `<div class="news"><div class="t">BREAKING NEWS</div><h3>${esc(ev.title)}</h3>
+    <p>${affected ? '<b>Betrifft dich:</b> ' + esc(ev.card) : esc(ev.sub)}</p></div>`;
+}
+
+const pollHTML = () => `<div class="card act"><h3>Was passiert mit dem Preis?</h3><div class="poll">
+  ${[['up', '▲ steigt'], ['same', '● gleich'], ['down', '▼ sinkt']].map(([k, l]) => `<button data-v="${k}" class="${myVote === k ? 'sel' : ''}">${l}</button>`).join('')}</div></div>`;
+
+const waitHTML = (a, b) => `<div class="card wait"><div class="spinner"></div><b>${a}</b><span class="muted">${b}</span></div>`;
+
+function render() {
+  if (!meta || !me) return;
+  if (meta.round !== lastRound) { lastRound = meta.round; myOrder = null; myVote = null; draft = null; spec = { b: null, s: null }; sdraft = {}; loadMine(); return; }
+  const ev = EVENTS[meta.event], ph = meta.phase;
+  const eff = effective(me, meta.event);
+  const isSpec = me.role === 'spec';
+  let h = '';
+  if (ev && ph !== 'lobby') h += newsCard(ev, !isSpec && ev.side === me.role);
+  h += roleCard(eff);
+  if (isSpec && EVENTS[meta.nextEvent] && meta.nextEvent !== meta.event && ph !== 'result')
+    h += `<div class="card" style="border:1.5px dashed var(--ink)"><b>Geheimes Gerücht</b><p style="margin:.4em 0 0">${esc(EVENTS[meta.nextEvent].rumor)}</p></div>`;
+
+  if (ph === 'lobby') h += waitHTML('Du bist dabei!', 'Gleich eröffnet der Makler den Handel.');
+  else if (ph === 'news') h += pollHTML();
+  else if (ph === 'trading') h += isSpec ? specForm() : traderForm(eff);
+  else if (ph === 'closed') h += waitHTML('Handel geschlossen', 'Der Makler ermittelt den Preis …');
+  else if (ph === 'result') h += isSpec ? specResult() : traderResult();
+  app.innerHTML = h;
+  bind(eff);
+}
+
+function traderForm(eff) {
+  const buyer = me.role === 'buyer';
+  if (draft == null) draft = myOrder ? myOrder.price : eff.value;
+  return `<div class="card act"><h3>${buyer ? 'Wie viel bietest du höchstens?' : 'Wie viel verlangst du mindestens?'}</h3>
+    <div class="stepper"><button class="ghost" data-d="-10">−</button><input id="price" type="number" inputmode="numeric" step="10" value="${draft}"><button class="ghost" data-d="10">+</button></div>
+    <div class="hint" id="hint">€ pro Tonne</div>
+    <button class="full" id="send">${myOrder ? 'Auftrag ändern' : 'Auftrag abschicken'}</button>
+    ${myOrder ? `<p class="ok">Abgegeben: ${myOrder.price} €/t</p>` : ''}</div>`;
+}
+
+function traderResult() {
+  const r = results[meta.round] || {}, f = (r.fills || {})[pid] || 0, g = (r.gains || {})[pid] || 0;
+  let m;
+  if (!myOrder) m = `<p class="muted">Kein Auftrag abgegeben.</p>`;
+  else if (!f) m = `<p><b>Nicht ausgeführt.</b> Dein Preis passte nicht zum Börsenpreis.</p>`;
+  else m = `<p style="margin-bottom:0">Ausgeführt: <b>${f} t</b> · ${me.role === 'buyer' ? 'Ersparnis' : 'Mehreinnahme'}</p><div class="big ${g >= 0 ? 'pos' : 'neg'}">${g >= 0 ? '+' : ''}${eur(g)}</div>`;
+  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${eur(r.price)}/t</div>${m}</div>`;
+}
+
+function specForm() {
+  const o = spec[side];
+  const d = sdraft[side] || (sdraft[side] = { price: o ? o.price : (lastPrice() || 200), qty: o ? o.qty : (side === 's' ? Math.min(20, me.inv || 0) : 20) });
+  const maxQ = side === 's' ? (me.inv || 0) : 100;
+  const sum = ['b', 's'].filter(k => spec[k]).map(k => `${k === 'b' ? 'Kauf' : 'Verkauf'}: ${spec[k].qty} t zu ${spec[k].price} €`).join(' · ');
+  return `<div class="card act"><div class="seg"><button data-side="b" class="${side === 'b' ? 'on' : ''}">Kaufen</button><button data-side="s" class="${side === 's' ? 'on' : ''}">Verkaufen</button></div>
+    <div class="stepper"><button class="ghost" data-sd="-10">−</button><input id="sprice" type="number" step="10" value="${d.price}"><button class="ghost" data-sd="10">+</button></div>
+    <div class="hint">€/t · Menge <select id="sqty">${Array.from({ length: Math.floor(maxQ / 10) + 1 }, (_, i) => i * 10).map(q => `<option ${q === d.qty ? 'selected' : ''}>${q}</option>`).join('')}</select> t</div>
+    <button class="full" id="ssend">${o ? 'Ändern' : (side === 'b' ? 'Kaufauftrag abschicken' : 'Verkaufsauftrag abschicken')}</button>
+    ${sum ? `<p class="ok">${sum}</p>` : ''}</div>`;
+}
+
+function specResult() {
+  const r = results[meta.round] || {}, fb = (r.fills || {})[pid + '__b'] || 0, fs = (r.fills || {})[pid + '__s'] || 0;
+  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${eur(r.price)}/t</div><p>Gekauft ${fb} t · Verkauft ${fs} t</p></div>`;
+}
+
+function bind(eff) {
+  app.querySelectorAll('.poll button').forEach(b => b.onclick = async () => { myVote = b.dataset.v; render(); await store.set(`sessions/${code}/polls/${meta.round}/${pid}`, myVote); });
+  const inp = document.getElementById('price');
+  if (inp) {
+    const buyer = me.role === 'buyer';
+    const check = () => {
+      const p = Number(inp.value); draft = p; const h = document.getElementById('hint');
+      const bad = buyer ? p > eff.value : p < eff.value;
+      h.textContent = bad ? (buyer ? 'Über deinem Höchstpreis – Verlustgefahr!' : 'Unter deinem Mindestpreis – Verlustgefahr!') : '€ pro Tonne';
+      h.className = 'hint' + (bad ? ' warn' : '');
+    };
+    inp.oninput = check; check();
+    app.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { inp.value = Math.max(10, Number(inp.value) + Number(b.dataset.d)); check(); });
+    document.getElementById('send').onclick = async () => {
+      const p = Math.round(Number(inp.value) / 10) * 10;
+      if (!(p > 0 && p <= 1000)) return;
+      myOrder = { price: p, qty: eff.qty, role: me.role, name: me.name, value: eff.value, ts: Date.now() }; draft = p;
+      await store.set(`sessions/${code}/orders/${meta.round}/${pid}`, myOrder); render();
+    };
+  }
+  app.querySelectorAll('[data-side]').forEach(b => b.onclick = () => { side = b.dataset.side; render(); });
+  const sp = document.getElementById('sprice');
+  if (sp) {
+    sp.oninput = () => sdraft[side].price = Number(sp.value);
+    document.getElementById('sqty').onchange = e => sdraft[side].qty = Number(e.target.value);
+    app.querySelectorAll('[data-sd]').forEach(b => b.onclick = () => { sdraft[side].price = Math.max(10, sdraft[side].price + Number(b.dataset.sd)); render(); });
+    document.getElementById('ssend').onclick = async () => {
+      const d = sdraft[side], path = `sessions/${code}/orders/${meta.round}/${pid}__${side}`;
+      if (!d.qty) { spec[side] = null; await store.remove(path); render(); return; }
+      const o = { price: Math.round(d.price / 10) * 10, qty: d.qty, role: side === 'b' ? 'buyer' : 'seller', spec: true, owner: pid, name: me.name, ts: Date.now() };
+      spec[side] = o; await store.set(path, o); render();
+    };
+  }
+}
+</script>
+</body>
+</html>
