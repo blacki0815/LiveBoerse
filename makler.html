@@ -53,7 +53,7 @@ const setMeta = obj => store.update(S() + '/meta', obj);
 async function newSession() {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   code = Array.from({ length: 4 }, () => A[Math.floor(Math.random() * A.length)]).join('');
-  await store.set('sessions/' + code, { meta: { phase: 'lobby', round: 1, event: '', nextEvent: 'duerre', created: Date.now() }, counter: 0 });
+  await store.set('sessions/' + code, { meta: { phase: 'lobby', round: 1, event: '', nextEvent: pickEvent(new Set()), created: Date.now() }, counter: 0 });
   lsSet('lb-host-code', code);
   location.reload();
 }
@@ -90,20 +90,39 @@ async function reveal() {
   await store.set(S() + '/results/' + R, { price: c.price, volume: c.volume, fills: c.fills, gains, applied: true });
   await setMeta({ phase: 'result' });
 }
-async function nextRound(eventId) {
+async function nextRound(choice) {
   view = null; sliderP = null;
-  const used = new Set(Object.values(meta.events || {}).concat([eventId]));
-  const next = Object.keys(EVENTS).filter(k => !used.has(k))[0] || '';
-  await setMeta({ round: meta.round + 1, event: eventId || '', nextEvent: next, events: { ...(meta.events || {}), [meta.round + 1]: eventId || '' }, phase: eventId ? 'news' : 'trading' });
+  const used = new Set(Object.values(meta.events || {}).filter(Boolean));
+  const round = meta.round + 1;
+  let eventId;
+  if (choice === '__rand') {
+    // Zufall: in Runde 2 immer ein Ereignis, danach ab und zu eine ruhige Runde
+    const quiet = round > 2 && Math.random() < 0.25;
+    eventId = quiet ? '' : (meta.nextEvent || pickEvent(used));
+  } else eventId = choice || '';
+  const used2 = new Set([...used, eventId].filter(Boolean));
+  await setMeta({
+    round, event: eventId, nextEvent: pickEvent(used2),
+    events: { ...(meta.events || {}), [round]: eventId },
+    phase: eventId ? 'news' : 'trading'
+  });
+  evChoice = null;
   if (eventId) await botVotes(); else await botOrders();
 }
+// zufälliges Ereignis, das in dieser Börse noch nicht dran war
+function pickEvent(used) {
+  const pool = Object.keys(EVENTS).filter(k => !used.has(k));
+  const from = pool.length ? pool : Object.keys(EVENTS);
+  return from[Math.floor(Math.random() * from.length)];
+}
+
 function step() {
   if (!meta) return;
   if (meta.phase === 'lobby' || meta.phase === 'news') openTrading();
   else if (meta.phase === 'trading') closeTrading();
   else if (meta.phase === 'closed') reveal();
   else if (meta.phase === 'result' && curView === 'table') { view = 'chart'; render(); }
-  else if (meta.phase === 'result') { const e = evChoice ?? meta.nextEvent; evChoice = null; nextRound(e); }
+  else if (meta.phase === 'result') nextRound(evChoice ?? '__rand');
 }
 
 // --------------------------- Bots ---------------------------
@@ -326,7 +345,10 @@ function renderDock(ph, v) {
   const os = roundOrders(meta.round), ps = playerList();
   let d = `<span class="info">${ph === 'trading' ? `${new Set(os.map(o => o.spec ? o.owner : o.pid)).size}/${ps.length} Aufträge` : `${ps.length} Händler`}</span>`;
   if (ph === 'closed' || ph === 'result') d += ['table', 'chart'].concat(ph === 'result' ? ['board'] : []).map(k => `<button class="ghost" data-view="${k}" style="${v === k ? 'border-color:var(--buy);color:var(--buy)' : ''}">${{ table: 'Orderbuch', chart: 'Diagramm', board: 'Rangliste' }[k]}</button>`).join('');
-  if (ph === 'result' && v !== 'table') d += `<select id="evSel">${Object.entries(EVENTS).map(([k, e]) => `<option value="${k}" ${k === (evChoice ?? meta.nextEvent) ? 'selected' : ''}>${esc(e.title)}</option>`).join('')}<option value="" ${evChoice === '' ? 'selected' : ''}>ohne Ereignis</option></select>`;
+  if (ph === 'result' && v !== 'table') {
+    const sel = evChoice ?? '__rand';
+    d += `<select id="evSel"><option value="__rand" ${sel === '__rand' ? 'selected' : ''}>Zufall (empfohlen)</option>${Object.entries(EVENTS).map(([k, e]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(e.title)}</option>`).join('')}<option value="" ${sel === '' ? 'selected' : ''}>ohne Ereignis</option></select>`;
+  }
   d += `<button id="go">${next} ▸</button><button class="ghost" id="toolsBtn" title="Werkzeuge (W)">⋯</button>`;
   $('dock').innerHTML = d;
   $('go').onclick = step;
