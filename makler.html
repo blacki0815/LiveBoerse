@@ -41,7 +41,7 @@ store.onConnection(ok => { $('conn').textContent = ok ? 'verbunden' : 'keine Ver
 
 let code = lsGet('lb-host-code');
 let meta = null, players = {}, orders = {}, polls = {}, results = {};
-let chartGeo = null, sliderP = null, drawnKey = '', view = null, evChoice = null, curView = null; // view: null = automatisch, sonst 'table' | 'chart' | 'board'
+let chartGeo = null, sliderP = null, drawnKey = '', view = null, evChoice = null, curView = null, botGen = 0; // view: null = automatisch, sonst 'table' | 'chart' | 'board'
 
 const S = () => 'sessions/' + code;
 const joinUrl = () => new URL('index.html?s=' + code, location.href).href;
@@ -95,7 +95,7 @@ async function nextRound(eventId) {
   const used = new Set(Object.values(meta.events || {}).concat([eventId]));
   const next = Object.keys(EVENTS).filter(k => !used.has(k))[0] || '';
   await setMeta({ round: meta.round + 1, event: eventId || '', nextEvent: next, events: { ...(meta.events || {}), [meta.round + 1]: eventId || '' }, phase: eventId ? 'news' : 'trading' });
-  if (!eventId) await botOrders();
+  if (eventId) await botVotes(); else await botOrders();
 }
 function step() {
   if (!meta) return;
@@ -114,21 +114,42 @@ async function addBots(n) {
     await store.set(S() + '/players/bot' + idx, { ...r, name: r.name + ' (Bot)', idx, bot: true });
   }
   if (meta.phase === 'trading') setTimeout(botOrders, 300);
+  if (meta.phase === 'news') setTimeout(botVotes, 300);
 }
 async function botOrders() {
-  const m = await store.get(S() + '/meta'), ps = await store.get(S() + '/players') || {}, upd = {}, lp = lastPrice() || 200;
+  const gen = ++botGen;                       // bricht noch laufende Bot-Timer der Vorrunde ab
+  const m = await store.get(S() + '/meta'), ps = await store.get(S() + '/players') || {}, lp = lastPrice() || 200;
   for (const [pid, p] of Object.entries(ps)) {
     if (!p.bot) continue;
-    if (p.role === 'spec') {
-      const bull = EVENTS[m.nextEvent] && EVENTS[m.nextEvent].answer === 'up';
-      upd[pid + '__b'] = { price: lp + (bull ? 40 : -30), qty: bull ? 40 : 10, role: 'buyer', spec: true, owner: pid, name: p.name, ts: Date.now() };
-      if (p.inv > 0) upd[pid + '__s'] = { price: lp + (bull ? 80 : -10), qty: Math.min(p.inv, bull ? 10 : 20), role: 'seller', spec: true, owner: pid, name: p.name, ts: Date.now() };
-      continue;
-    }
-    const e = effective(p, m.event), n = [0, 0, 10][Math.floor(Math.random() * 3)];
-    upd[pid] = { price: Math.max(10, p.role === 'buyer' ? e.value - n : e.value + n), qty: e.qty, role: p.role, name: p.name, value: e.value, ts: Date.now() };
+    const delay = 600 + Math.random() * 4400;  // Bots brauchen wie echte Leute 0,6–5 Sekunden
+    setTimeout(async () => {
+      if (gen !== botGen) return;
+      if (p.role === 'spec') {
+        const bull = EVENTS[m.nextEvent] && EVENTS[m.nextEvent].answer === 'up';
+        const upd = {};
+        upd[pid + '__b'] = { price: lp + (bull ? 40 : -30), qty: bull ? 40 : 10, role: 'buyer', spec: true, owner: pid, name: p.name, ts: Date.now() };
+        if (p.inv > 0) upd[pid + '__s'] = { price: lp + (bull ? 80 : -10), qty: Math.min(p.inv, bull ? 10 : 20), role: 'seller', spec: true, owner: pid, name: p.name, ts: Date.now() };
+        await store.update(S() + '/orders/' + m.round, upd);
+        return;
+      }
+      const e = effective(p, m.event), n = [0, 0, 10][Math.floor(Math.random() * 3)];
+      await store.set(`${S()}/orders/${m.round}/${pid}`, { price: Math.max(10, p.role === 'buyer' ? e.value - n : e.value + n), qty: e.qty, role: p.role, name: p.name, value: e.value, ts: Date.now() });
+    }, delay);
   }
-  if (Object.keys(upd).length) await store.update(S() + '/orders/' + m.round, upd);
+}
+
+// Bots stimmen bei der Prognose mit – meistens richtig, aber nicht immer
+async function botVotes() {
+  const gen = ++botGen;
+  const m = await store.get(S() + '/meta'), ps = await store.get(S() + '/players') || {};
+  const ev = EVENTS[m.event];
+  if (!ev) return;
+  const others = ['up', 'down', 'same'].filter(x => x !== ev.answer);
+  for (const [pid, p] of Object.entries(ps)) {
+    if (!p.bot) continue;
+    const v = Math.random() < 0.7 ? ev.answer : others[Math.floor(Math.random() * others.length)];
+    setTimeout(async () => { if (gen === botGen) await store.set(`${S()}/polls/${m.round}/${pid}`, v); }, 800 + Math.random() * 4200);
+  }
 }
 
 // --------------------------- Diagramm ---------------------------
