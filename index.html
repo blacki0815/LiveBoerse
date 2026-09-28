@@ -12,7 +12,7 @@
 <main class="phone" id="app"><div class="wait"><div class="spinner"></div>Lade …</div></main>
 
 <script type="module">
-import { createStore, roleForIndex, EVENTS, effective, affected, sizeLabel, eur, esc, lsGet, lsSet, REF_PRICE, SCALE_MIN, SCALE_MAX } from './shared.js';
+import { createStore, roleForIndex, EVENTS, effective, affected, sizeLabel, orderOutcome, eur, esc, lsGet, lsSet, REF_PRICE, SCALE_MIN, SCALE_MAX } from './shared.js';
 
 const app = document.getElementById('app');
 let code = (new URLSearchParams(location.search).get('s') || '').toUpperCase().trim();
@@ -156,7 +156,7 @@ function roleCard(eff) {
   }
   const t = total();
   return `<div class="card"><div class="role"><div><div class="lab ${r}">${lab}</div><h2>${esc(me.name)}</h2></div>
-    ${t ? `<div class="score">Punkte<b>${eur(t)}</b></div>` : ''}</div>
+    ${t ? `<div class="score">Gewinn<b>${eur(t)}</b></div>` : ''}</div>
     <div class="limit"><div><div class="k">${r === 'buyer' ? 'Du willst kaufen' : 'Du willst verkaufen'}</div><div class="v">${eff.qty} t</div></div>
     <div class="secret"><div class="k">${r === 'buyer' ? 'Höchstpreis (geheim)' : 'Mindestpreis (geheim)'}</div><div class="v">${eff.value} €/t</div></div></div>
     <p class="ref">${sizeLabel(me)} · ${standing(eff).t}<br>${refLine()}</p>
@@ -214,14 +214,17 @@ function traderForm(eff) {
 function traderResult() {
   const r = results[meta.round] || {}, f = (r.fills || {})[pid] || 0, g = (r.gains || {})[pid] || 0;
   const buyer = me.role === 'buyer', lim = effective(me, meta.event).value, per = buyer ? lim - r.price : r.price - lim;
-  let m2;
-  if (!myOrder) m2 = `<p class="muted">Kein Auftrag abgegeben.</p>`;
-  else if (!f) m2 = `<p><b>Nicht ausgeführt.</b> ${buyer ? `Du wolltest höchstens ${myOrder.price} € zahlen, der Börsenpreis lag darüber.` : `Du wolltest mindestens ${myOrder.price} € haben, der Börsenpreis lag darunter.`}</p>`;
-  else m2 = `<p>Ausgeführt: <b>${f} t</b> zu je ${r.price} €</p>
-    <p class="calc">${buyer ? 'Dein Höchstpreis' : 'Börsenpreis'} ${buyer ? lim : r.price} € − ${buyer ? r.price : lim} € = <b>${per} €</b> pro Tonne<br>
-    ${per} € × ${f} t = </p><div class="big ${g >= 0 ? 'pos' : 'neg'}">${g >= 0 ? '+' : ''}${eur(g)}</div>
-    <p class="muted" style="margin:0">${buyer ? 'so viel hast du gegenüber deinem Limit gespart' : 'so viel hast du über deinem Limit verdient'}</p>`;
-  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${r.price} €/t</div>${m2}</div>`;
+  let body;
+  if (!myOrder) body = `<p class="muted">Kein Auftrag abgegeben.</p>`;
+  else {
+    const o = orderOutcome({ role: me.role, myPrice: myOrder.price, qty: myOrder.qty, price: r.price, filled: f });
+    body = `<p class="expl${f ? '' : ' warn'}">${o.text}</p>`;
+    if (f) body += `<p class="calc">${buyer ? `Dein Höchstpreis ${lim} € − Börsenpreis ${r.price} €` : `Börsenpreis ${r.price} € − dein Mindestpreis ${lim} €`} = <b>${per} €</b> pro Tonne<br>${per} € × ${f} t = </p>
+      <div class="big ${g >= 0 ? 'pos' : 'neg'}">${g >= 0 ? '+' : ''}${eur(g)}</div>
+      <p class="muted" style="margin:0">${buyer ? 'so viel hast du gegenüber deinem Limit gespart' : 'so viel hast du über deinem Limit verdient'}</p>`;
+  }
+  if (r.price == null) return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">kein Handel</div><p class="expl">In dieser Runde passten keine Aufträge zusammen – es kam kein Preis zustande.</p></div>`;
+  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${r.price} €/t</div>${body}</div>`;
 }
 
 function specForm() {
@@ -242,7 +245,7 @@ function specForm() {
 
 function specResult() {
   const r = results[meta.round] || {}, fb = (r.fills || {})[pid + '__b'] || 0, fs = (r.fills || {})[pid + '__s'] || 0;
-  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${eur(r.price)}/t</div><p>Gekauft ${fb} t · Verkauft ${fs} t</p></div>`;
+  return `<div class="card"><div class="muted">Börsenpreis</div><div class="big">${r.price == null ? 'kein Handel' : eur(r.price) + '/t'}</div><p>Gekauft ${fb} t · Verkauft ${fs} t</p></div>`;
 }
 
 function bind(eff) {
