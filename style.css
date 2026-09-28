@@ -61,6 +61,13 @@ input,select{font:inherit;padding:.55em .7em;border:1.5px solid var(--line);bord
 .expl.warn{background:var(--sell-soft);color:var(--ink);font-weight:600}
 .calc{font-size:.95rem;margin:.6em 0 .2em}
 .ref{font-size:.8rem;color:var(--muted);margin:10px 0 0}
+.linkbtn{background:none;color:var(--buy);text-decoration:underline;padding:6px 0;font-size:.85rem;font-weight:600;display:block;margin:4px auto 0}
+.dots{display:flex;gap:6px;justify-content:center;margin-bottom:10px}
+.dots span{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.dots span.on{background:var(--buy)}
+.hit{margin:.6em 0 0;padding:.5em .7em;border-radius:6px;font-size:.9rem}
+.hit.yes{background:rgba(255,255,255,.18);font-weight:700}
+.hit.no{background:rgba(255,255,255,.1);opacity:.9}
 .full{width:100%;padding:.95em;font-size:1.05rem}
 .hint{font-size:.85rem;color:var(--muted);text-align:center;min-height:1.1em;margin:4px 0 10px}
 .hint.warn{color:var(--sell);font-weight:700}
@@ -90,11 +97,11 @@ input,select{font:inherit;padding:.55em .7em;border:1.5px solid var(--line);bord
 .count{font-size:clamp(2.5rem,5vw,4.5rem);font-weight:900}
 .progress{width:min(900px,80vw);height:18px;background:#fff;border:1px solid var(--line);border-radius:99px;overflow:hidden}
 .progress div{height:100%;background:var(--buy);transition:width .4s}
-.qr-corner{position:fixed;right:24px;bottom:24px;text-align:center;font-weight:800;color:var(--buy)}
 .bignews{background:var(--buy);color:#fff;border-radius:var(--radius);padding:5vh 4vw}
 .bignews .t{letter-spacing:.3em;font-weight:900;color:var(--gold-l)}
 .bignews h1{font-size:clamp(2.5rem,5.5vw,4.8rem);margin:.15em 0}
 .bignews p{font-size:clamp(1.2rem,2vw,1.7rem);margin:0}
+.bignews .who{margin-top:1.5vh;font-weight:800;color:var(--gold-l);font-size:clamp(1rem,1.6vw,1.35rem)}
 .bars{display:grid;grid-template-columns:repeat(3,1fr);gap:2vw}
 .pbar .l{font-size:1.4rem;font-weight:800;display:flex;justify-content:space-between}
 .pbar .track{height:16px;background:#fff;border:1px solid var(--line);border-radius:99px;overflow:hidden;margin-top:10px}
