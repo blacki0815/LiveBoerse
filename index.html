@@ -12,13 +12,14 @@
 <main class="phone" id="app"><div class="wait"><div class="spinner"></div>Lade …</div></main>
 
 <script type="module">
-import { createStore, roleForIndex, EVENTS, effective, eur, esc, lsGet, lsSet, REF_PRICE, SCALE_MIN, SCALE_MAX } from './shared.js';
+import { createStore, roleForIndex, EVENTS, effective, affected, sizeLabel, eur, esc, lsGet, lsSet, REF_PRICE, SCALE_MIN, SCALE_MAX } from './shared.js';
 
 const app = document.getElementById('app');
 let code = (new URLSearchParams(location.search).get('s') || '').toUpperCase().trim();
 let store, me = null, meta = null, results = {}, pid = null, lastRound = null;
 let myOrder = null, myVote = null, draft = null;          // Händler
 let spec = { b: null, s: null }, side = 'b', sdraft = {}; // Spekulanten
+let introStep = 0, introDone = false, lastPhase = null;                     // Einführung nach dem Beitreten
 
 store = await createStore();
 if (store.mode === 'local') document.getElementById('localbanner').innerHTML = '<div class="banner-local">Lokaler Testmodus</div>';
@@ -60,6 +61,44 @@ async function loadMine() {
   render();
 }
 
+
+
+// Wo stehe ich im Feld? (ehrliche Einschätzung statt Rätselraten)
+function standing(eff) {
+  const d = eff.value - REF_PRICE;
+  if (me.role === 'buyer') {
+    if (d >= 30) return { t: 'Du kannst viel zahlen', s: 'Du kommst fast sicher zum Zug. Versuch trotzdem, günstig einzukaufen.' };
+    if (d <= -20) return { t: 'Du kannst nur wenig zahlen', s: 'Es kann sein, dass du leer ausgehst. Geh nah an dein Limit, sonst bekommst du nichts.' };
+    return { t: 'Du liegst im Mittelfeld', s: 'Ob du zum Zug kommst, hängt vom Börsenpreis ab.' };
+  }
+  if (d <= -30) return { t: 'Du produzierst günstig', s: 'Du kommst fast sicher zum Zug. Versuch trotzdem, teuer zu verkaufen.' };
+  if (d >= 20) return { t: 'Du produzierst teuer', s: 'Es kann sein, dass du leer ausgehst. Geh nah an dein Limit, sonst verkaufst du nichts.' };
+  return { t: 'Du liegst im Mittelfeld', s: 'Ob du zum Zug kommst, hängt vom Börsenpreis ab.' };
+}
+
+function introSteps(eff) {
+  const buyer = me.role === 'buyer', st = standing(eff);
+  if (me.role === 'spec') return [
+    { h: 'Du bist Spekulant', t: `Du heißt <b>${esc(me.name)}</b> und hast ein Lager von ${me.inv || 0} t Weizen. Du darfst <b>kaufen und verkaufen</b> – anders als alle anderen.` },
+    { h: 'So verdienst du', t: 'Billig kaufen, später teuer verkaufen. Dein Gewinn entsteht über die Runden hinweg, nicht in einer einzelnen Runde.' },
+    { h: 'Dein Vorteil', t: 'Nur du bekommst vorab ein <b>Gerücht</b> über die nächste Nachricht. Steigt der Preis vermutlich, kauf jetzt. Fällt er, verkauf jetzt.' },
+    { h: 'Und dann?', t: 'Der Makler bestimmt aus allen Aufträgen <b>einen</b> Börsenpreis. Verrate dein Gerücht nicht – sonst bringt es dir nichts.' },
+  ];
+  return [
+    { h: `Du bist ${buyer ? 'Käufer' : 'Verkäufer'}`, t: `Du bist <b>${esc(me.name)}</b>, ein ${sizeLabel(me)}, und willst <b>${eff.qty} t Weizen ${buyer ? 'kaufen' : 'verkaufen'}</b>.` },
+    { h: 'Dein geheimes Limit', t: `Dein ${buyer ? 'Höchstpreis' : 'Mindestpreis'} ist <b>${eff.value} €/t</b>. ${buyer ? 'Mehr zu zahlen lohnt sich für dich nicht.' : 'Darunter zu verkaufen lohnt sich für dich nicht.'} Niemand sonst kennt diese Zahl.` },
+    { h: 'So läuft der Handel', t: `Du nennst dem Makler <b>einen Preis</b>. Er sammelt alle Aufträge und legt <b>einen</b> Börsenpreis fest. Du kommst zum Zug, wenn dein Preis ${buyer ? 'mindestens so hoch' : 'höchstens so hoch'} ist wie der Börsenpreis.` },
+    { h: 'Darauf kommt es an', t: `${buyer ? 'Je mehr du bietest, desto sicherer bekommst du Weizen – aber desto weniger sparst du.' : 'Je weniger du verlangst, desto sicherer verkaufst du – aber desto weniger verdienst du.'}<br><br><b>${st.t}:</b> ${st.s}` },
+  ];
+}
+
+function introCard(eff) {
+  const steps = introSteps(eff), s = steps[Math.min(introStep, steps.length - 1)];
+  return `<div class="card act"><div class="dots">${steps.map((_, i) => `<span class="${i === introStep ? 'on' : ''}"></span>`).join('')}</div>
+    <h3>${s.h}</h3><p class="expl">${s.t}</p>
+    <button class="full" id="introNext">${introStep < steps.length - 1 ? 'Weiter' : 'Alles klar, los geht\'s'}</button>
+    ${introStep > 0 ? '<button class="linkbtn" id="introBack">zurück</button>' : ''}</div>`;
+}
 
 const anchor = () => lastPrice() || REF_PRICE;
 const refLine = () => lastPrice()
@@ -112,19 +151,22 @@ function roleCard(eff) {
     const lp = lastPrice() || 200;
     return `<div class="card"><div class="role"><div><div class="lab spec">${lab}</div><h2>${esc(me.name)}</h2></div>
       <div class="score">Depotwert<b>${eur((me.cash || 0) + (me.inv || 0) * lp)}</b></div></div>
-      <div class="limit"><div><div class="k">Lager</div><div class="v">${me.inv || 0} t</div></div><div><div class="k">Kasse</div><div class="v">${eur(me.cash || 0)}</div></div></div></div>`;
+      <div class="limit"><div><div class="k">Lager</div><div class="v">${me.inv || 0} t</div></div><div><div class="k">Kasse</div><div class="v">${eur(me.cash || 0)}</div></div></div>
+      <button class="linkbtn" id="showIntro">Rolle nochmal erklären</button></div>`;
   }
   const t = total();
   return `<div class="card"><div class="role"><div><div class="lab ${r}">${lab}</div><h2>${esc(me.name)}</h2></div>
     ${t ? `<div class="score">Punkte<b>${eur(t)}</b></div>` : ''}</div>
     <div class="limit"><div><div class="k">${r === 'buyer' ? 'Du willst kaufen' : 'Du willst verkaufen'}</div><div class="v">${eff.qty} t</div></div>
     <div class="secret"><div class="k">${r === 'buyer' ? 'Höchstpreis (geheim)' : 'Mindestpreis (geheim)'}</div><div class="v">${eff.value} €/t</div></div></div>
-    <p class="ref">${refLine()}</p></div>`;
+    <p class="ref">${sizeLabel(me)} · ${standing(eff).t}<br>${refLine()}</p>
+    <button class="linkbtn" id="showIntro">Rolle nochmal erklären</button></div>`;
 }
 
-function newsCard(ev, affected) {
+function newsCard(ev, hit) {
   return `<div class="news"><div class="t">BREAKING NEWS</div><h3>${esc(ev.title)}</h3>
-    <p>${affected ? '<b>Betrifft dich:</b> ' + esc(ev.card) : esc(ev.sub)}</p></div>`;
+    <p>${esc(ev.sub)}</p>
+    <p class="hit ${hit ? 'yes' : 'no'}">${hit ? 'Betrifft dich: ' + esc(ev.card) : 'Betrifft dich nicht – deine Lage bleibt gleich.'}</p></div>`;
 }
 
 const pollHTML = () => `<div class="card act"><h3>Was passiert mit dem Preis?</h3><div class="poll">
@@ -136,15 +178,18 @@ function render() {
   if (!meta || !me) return;
   if (meta.round !== lastRound) { lastRound = meta.round; myOrder = null; myVote = null; draft = null; spec = { b: null, s: null }; sdraft = {}; loadMine(); return; }
   const ev = EVENTS[meta.event], ph = meta.phase;
+  // Sobald der Handel startet, schließt sich die Einführung automatisch (per Knopf wieder aufrufbar)
+  if (lastPhase !== ph) { if (lastPhase && ph !== 'lobby') { introDone = true; introStep = 0; } lastPhase = ph; }
   const eff = effective(me, meta.event);
   const isSpec = me.role === 'spec';
   let h = '';
-  if (ev && ph !== 'lobby') h += newsCard(ev, !isSpec && ev.side === me.role);
+  if (ev && ph !== 'lobby') h += newsCard(ev, affected(me, meta.event));
   h += roleCard(eff);
   if (isSpec && EVENTS[meta.nextEvent] && meta.nextEvent !== meta.event && ph !== 'result')
     h += `<div class="card" style="border:1.5px dashed var(--ink)"><b>Geheimes Gerücht</b><p style="margin:.4em 0 0">${esc(EVENTS[meta.nextEvent].rumor)}</p></div>`;
 
-  if (ph === 'lobby') h += waitHTML('Du bist dabei!', 'Gleich eröffnet der Makler den Handel.');
+  if (!introDone) h += introCard(eff);
+  else if (ph === 'lobby') h += waitHTML('Du bist dabei!', 'Gleich eröffnet der Makler den Handel.');
   else if (ph === 'news') h += pollHTML();
   else if (ph === 'trading') h += isSpec ? specForm() : traderForm(eff);
   else if (ph === 'closed') h += waitHTML('Handel geschlossen', 'Der Makler ermittelt den Preis …');
@@ -201,6 +246,12 @@ function specResult() {
 }
 
 function bind(eff) {
+  const nx = document.getElementById('introNext');
+  if (nx) nx.onclick = () => { const n = introSteps(eff).length; if (introStep < n - 1) introStep++; else { introDone = true; introStep = 0; } render(); };
+  const bk = document.getElementById('introBack');
+  if (bk) bk.onclick = () => { introStep--; render(); };
+  const si = document.getElementById('showIntro');
+  if (si) si.onclick = () => { introDone = false; introStep = 0; render(); };
   app.querySelectorAll('.poll button').forEach(b => b.onclick = async () => { myVote = b.dataset.v; render(); await store.set(`sessions/${code}/polls/${meta.round}/${pid}`, myVote); });
   const inp = document.getElementById('price');
   if (inp) {
