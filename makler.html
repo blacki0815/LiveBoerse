@@ -226,7 +226,8 @@ function vLobby(ps) {
 }
 function vNews(ev, R, showAnswer) {
   const pv = Object.values(polls[R] || {}), n = Math.max(1, pv.length);
-  return `<div class="bignews"><div class="t">BREAKING NEWS</div><h1>${esc(ev.title)}</h1><p>${esc(ev.sub)}</p></div>
+  return `<div class="bignews"><div class="t">BREAKING NEWS</div><h1>${esc(ev.title)}</h1><p>${esc(ev.sub)}</p>
+    <p class="who">${esc(ev.who || (ev.side === 'seller' ? 'Betrifft alle Anbieter' : 'Betrifft alle Nachfrager'))}</p></div>
     <div class="h1" style="font-size:clamp(1.5rem,2.6vw,2.2rem)">Was passiert mit dem Weizenpreis? <span class="muted" style="font-weight:400">${pv.length} Stimmen</span></div>
     <div class="bars">${[['up', '▲ steigt'], ['same', '● bleibt gleich'], ['down', '▼ sinkt']].map(([k, l]) => {
       const c = pv.filter(v => v === k).length;
