@@ -64,8 +64,8 @@ export const REF_PRICE = 200;      // Vorjahresdurchschnitt, dient allen als Ank
 export const SCALE_MIN = 60, SCALE_MAX = 360;
 
 // ---------- Rollen ----------
-const BUY_P = [300, 160, 240, 200, 120, 280, 180, 260, 140, 220, 320, 190, 250, 170, 230, 150, 270, 210, 130, 290];
-const SELL_P = [100, 240, 160, 200, 280, 120, 220, 140, 260, 180, 80, 210, 150, 230, 170, 250, 110, 190, 270, 130];
+const BUY_P = [280, 190, 240, 210, 170, 260, 200, 250, 180, 220, 300, 195, 235, 185, 225, 175, 265, 205, 165, 275];
+const SELL_P = [120, 210, 160, 195, 235, 140, 205, 150, 225, 180, 100, 200, 155, 215, 170, 230, 130, 190, 240, 145];
 const BUY_Q = [30, 20, 40, 20, 30, 10, 40, 30, 20, 50, 20, 30, 10, 40, 20, 30, 20, 30, 40, 20];
 const SELL_Q = [20, 30, 30, 40, 20, 50, 20, 30, 20, 30, 40, 20, 30, 10, 30, 20, 40, 20, 10, 30];
 const BUY_N = ['Mühle Weißmehl', 'Bäckerei Krume', 'Brauerei Hopfenglück', 'Nudelwerk Spirelli', 'Großbäcker Laib & Co', 'Mühle am Neckar', 'Brezelhaus Schwaben', 'Pizzeria Bella Farina', 'Keksfabrik Knusper', 'Futterhandel Heu', 'Backstube Morgenrot', 'Mühle Kornblume', 'Toastwerk Golden', 'Brotzeit GmbH', 'Maultaschen-Manufaktur', 'Café Streusel', 'Bio-Bäckerei Dinkel', 'Waffelwerk Süß', 'Mühle Talgrund', 'Spätzle-Fabrik Alb'];
@@ -80,7 +80,7 @@ export function roleForIndex(i) {
     const k = Object.keys(SPECIAL).filter(x => SPECIAL[x] === 'spec' && Number(x) < i).length;
     return { role: 'spec', name: SPEC_N[k % SPEC_N.length], inv: 20, cash: 0, qty: 0, value: 0 };
   }
-  if (SPECIAL[i] === 'mega') return { role: 'seller', mega: true, value: 150, qty: 80, name: 'GlobalGrain AG (Konzern)' };
+  if (SPECIAL[i] === 'mega') return { role: 'seller', mega: true, value: 160, qty: 80, name: 'GlobalGrain AG (Konzern)' };
   const n = i - Object.keys(SPECIAL).filter(x => Number(x) < i).length;
   const buyer = n % 2 === 0;
   const k = Math.floor(n / 2);
@@ -90,6 +90,15 @@ export function roleForIndex(i) {
     ? { role: 'buyer', value: BUY_P[j] + tweak, qty: BUY_Q[j], name: BUY_N[j] + (lap ? ' ' + (lap + 1) : '') }
     : { role: 'seller', value: SELL_P[j] + tweak, qty: SELL_Q[j], name: SELL_N[j] + (lap ? ' ' + (lap + 1) : '') };
 }
+
+// ---------- Größenklassen (für gezielte Ereignisse) ----------
+export function sizeOf(p) {
+  if (p.mega) return 'gross';
+  const q = Number(p.qty) || 0;
+  return q >= 40 ? 'gross' : q <= 30 ? 'klein' : 'mittel';
+}
+export const sizeLabel = p => p.mega ? 'Großkonzern' : ({ gross: 'großer Betrieb', mittel: 'mittlerer Betrieb', klein: 'kleiner Betrieb' })[sizeOf(p)];
+const isSmall = p => sizeOf(p) === 'klein', isBig = p => sizeOf(p) === 'gross';
 
 // ---------- Ereignisse (Schocks) ----------
 export const EVENTS = {
@@ -128,12 +137,57 @@ export const EVENTS = {
     rumor: 'Aus der Chemiebranche hört man: Dünger wird bald drastisch teurer …',
     answer: 'up'
   },
+
+  // ----- Ereignisse, die nur eine Gruppe treffen -----
+  frost: {
+    title: 'Spätfrost in den Höhenlagen!', sub: 'Nur die kleinen Höfe in Hanglagen verlieren ihre Ernte – die großen Betriebe im Flachland bleiben verschont.',
+    who: 'Nur kleine Anbieter (bis 30 t)', side: 'seller', match: isSmall,
+    effect: 'Angebot sinkt', shift: 'Angebotskurve verschiebt sich im unteren Bereich nach links',
+    card: 'Frostschaden: nur noch die halbe Menge, und das Nachsäen kostet (+50 €/t).', apply: p => ({ ...p, qty: Math.max(10, Math.round(Number(p.qty) / 20) * 10), value: Number(p.value) + 50 }),
+    rumor: 'Der Wetterdienst warnt vor Frostnächten – vor allem in den Höhenlagen …',
+    answer: 'up'
+  },
+  subvention: {
+    title: 'EU-Hilfspaket für kleine Höfe!', sub: 'Kleine Betriebe bekommen eine Beihilfe je Tonne – sie können deshalb günstiger anbieten.',
+    who: 'Nur kleine Anbieter (bis 30 t)', side: 'seller', match: isSmall,
+    effect: 'Angebot steigt (Kosten sinken)', shift: 'Angebotskurve verschiebt sich nach unten/rechts',
+    card: 'Die Beihilfe senkt deinen Mindestpreis um 60 €/t – und du baust 10 t mehr an.', apply: p => ({ ...p, value: Math.max(40, Number(p.value) - 60), qty: Number(p.qty) + 10 }),
+    rumor: 'In Brüssel wird über Direkthilfen für kleine Betriebe verhandelt …',
+    answer: 'down'
+  },
+  diesel: {
+    title: 'Dieselpreis explodiert!', sub: 'Große Betriebe bewirtschaften weite Flächen und fahren lange Strecken – ihre Kosten steigen stark, kleine Höfe spüren kaum etwas.',
+    who: 'Nur große Anbieter (ab 40 t) und der Konzern', side: 'seller', match: isBig,
+    effect: 'Angebot sinkt (Kosten steigen)', shift: 'Angebotskurve verschiebt sich im oberen Bereich nach links',
+    card: 'Deine Maschinen fressen Diesel: Mindestpreis +50 €/t.', apply: p => ({ ...p, value: Number(p.value) + 50 }),
+    rumor: 'Die Ölpreise ziehen an – Diesel dürfte bald deutlich teurer werden …',
+    answer: 'up'
+  },
+  bio: {
+    title: 'Bio-Trend bei Handwerksbäckern!', sub: 'Kunden zahlen für handwerkliches Brot mehr – kleine Bäckereien können deshalb mehr für Weizen bieten.',
+    who: 'Nur kleine Nachfrager (bis 30 t)', side: 'buyer', match: isSmall,
+    effect: 'Nachfrage steigt', shift: 'Nachfragekurve verschiebt sich nach oben/rechts',
+    card: 'Bio-Boom: Du brauchst 20 t mehr und kannst 40 €/t mehr zahlen.', apply: p => ({ ...p, qty: Number(p.qty) + 20, value: Number(p.value) + 40 }),
+    rumor: 'Handwerksbäcker melden Rekordumsätze mit Bio-Brot …',
+    answer: 'up'
+  },
+  industrie: {
+    title: 'Industriebäckereien bauen aus!', sub: 'Die großen Abnehmer nehmen neue Werke in Betrieb und brauchen deutlich mehr Weizen. Kleine Bäckereien ändern nichts.',
+    who: 'Nur große Nachfrager (ab 40 t)', side: 'buyer', match: isBig,
+    effect: 'Nachfrage steigt', shift: 'Nachfragekurve verschiebt sich nach rechts',
+    card: 'Neues Werk: Du brauchst 50 t mehr.', apply: p => ({ ...p, qty: Number(p.qty) + 50 }),
+    rumor: 'Zwei Industriebäckereien kündigen große Werkseröffnungen an …',
+    answer: 'up'
+  },
 };
 
-export function effective(player, eventId) {
+export function affected(player, eventId) {
   const ev = EVENTS[eventId];
-  if (!ev || ev.side !== player.role) return { ...player };
-  return ev.apply(player);
+  if (!ev || ev.side !== player.role) return false;
+  return ev.match ? !!ev.match(player) : true;
+}
+export function effective(player, eventId) {
+  return affected(player, eventId) ? EVENTS[eventId].apply(player) : { ...player };
 }
 
 // ---------- Markt: Meistausführungsprinzip ----------
