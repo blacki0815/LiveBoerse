@@ -1,12 +1,14 @@
 /* === GFS-Farbpalette (überall gleich) ===
+   Nur Blau, Weiß und Schwarz.
    Dunkelblau #1E3A5F = Nachfrage/Käufer + Hauptfarbe
-   Weizengold #B7791F = Angebot/Verkäufer + Akzent
+   Mittelblau #2E6FA7 = Angebot/Verkäufer + Akzent
+   Hellblau   #9DC2E4 = Akzent auf dunklem Grund
    Anthrazit  #1F2328 = Text, Gleichgewicht
    Grau #6B6F76 · Hellgrau #F3F4F6 · Linien #D9DCE1
-   Tönungen: Hellblau #E6ECF3 · Hellgold #F6EEDD */
+   Tönungen: #E6ECF3 (Nachfrage) · #DEEAF6 (Angebot) */
 :root{
   --bg:#F3F4F6; --panel:#FFFFFF; --ink:#1F2328; --muted:#6B6F76; --line:#D9DCE1;
-  --buy:#1E3A5F; --buy-soft:#E6ECF3; --sell:#B7791F; --sell-soft:#F6EEDD; --gold-l:#E8C27A;
+  --buy:#1E3A5F; --buy-soft:#E6ECF3; --sell:#2E6FA7; --sell-soft:#DEEAF6; --acc-l:#9DC2E4;
   --radius:10px; font-family: Arial, Helvetica, sans-serif;
 }
 *{box-sizing:border-box}
@@ -20,7 +22,7 @@ input,select{font:inherit;padding:.55em .7em;border:1.5px solid var(--line);bord
 .bar-top{background:var(--buy);color:#fff;display:flex;align-items:center;gap:1rem;padding:.55rem 1rem;font-size:.9rem}
 .bar-top .logo{font-weight:800;letter-spacing:.1em}
 .bar-top .sp{flex:1}
-.conn{opacity:.8}.conn.off{opacity:1;font-weight:700;color:var(--gold-l)}
+.conn{opacity:.8}.conn.off{opacity:1;font-weight:700;color:var(--acc-l)}
 .banner-local{background:var(--sell-soft);padding:.45rem 1rem;font-size:.85rem;text-align:center}
 
 /* ================= Handy ================= */
@@ -36,7 +38,7 @@ input,select{font:inherit;padding:.55em .7em;border:1.5px solid var(--line);bord
 .limit .k{font-size:.75rem;color:var(--muted)} .limit .v{font-size:1.4rem;font-weight:800}
 .limit .secret{background:var(--buy);color:#fff} .limit .secret .k{color:#C9D5E3}
 .news{background:var(--buy);color:#fff;border-radius:var(--radius);padding:14px 16px;margin-bottom:12px}
-.news .t{font-size:.7rem;font-weight:800;letter-spacing:.15em;color:var(--gold-l)}
+.news .t{font-size:.7rem;font-weight:800;letter-spacing:.15em;color:var(--acc-l)}
 .news h3{margin:.2em 0;font-size:1.2rem}
 .news p{margin:.3em 0 0;font-size:.95rem}
 .act h3{margin:0 0 4px;font-size:1.05rem}
@@ -98,10 +100,10 @@ input,select{font:inherit;padding:.55em .7em;border:1.5px solid var(--line);bord
 .progress{width:min(900px,80vw);height:18px;background:#fff;border:1px solid var(--line);border-radius:99px;overflow:hidden}
 .progress div{height:100%;background:var(--buy);transition:width .4s}
 .bignews{background:var(--buy);color:#fff;border-radius:var(--radius);padding:5vh 4vw}
-.bignews .t{letter-spacing:.3em;font-weight:900;color:var(--gold-l)}
+.bignews .t{letter-spacing:.3em;font-weight:900;color:var(--acc-l)}
 .bignews h1{font-size:clamp(2.5rem,5.5vw,4.8rem);margin:.15em 0}
 .bignews p{font-size:clamp(1.2rem,2vw,1.7rem);margin:0}
-.bignews .who{margin-top:1.5vh;font-weight:800;color:var(--gold-l);font-size:clamp(1rem,1.6vw,1.35rem)}
+.bignews .who{margin-top:1.5vh;font-weight:800;color:var(--acc-l);font-size:clamp(1rem,1.6vw,1.35rem)}
 .bars{display:grid;grid-template-columns:repeat(3,1fr);gap:2vw}
 .pbar .l{font-size:1.4rem;font-weight:800;display:flex;justify-content:space-between}
 .pbar .track{height:16px;background:#fff;border:1px solid var(--line);border-radius:99px;overflow:hidden;margin-top:10px}
