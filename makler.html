@@ -195,16 +195,16 @@ function chartSVG(os, prev, eq, sp) {
     return d + (role === 'seller' ? ` L${X(q)},${Y(yMax)}` : ` L${X(q)},${Y(0)}`);
   };
   if (prev && prev.length) {
-    g += `<path d="${path(prev, 'seller')}" class="curve" stroke="#B7791F" stroke-opacity=".35" stroke-dasharray="8 7"/>`;
+    g += `<path d="${path(prev, 'seller')}" class="curve" stroke="#3E86C4" stroke-opacity=".35" stroke-dasharray="8 7"/>`;
     g += `<path d="${path(prev, 'buyer')}" class="curve" stroke="#1E3A5F" stroke-opacity=".35" stroke-dasharray="8 7"/>`;
   }
   const anim = drawnKey !== meta.round + meta.phase ? 'draw' : '';
   drawnKey = meta.round + meta.phase;
-  g += `<path d="${path(os, 'seller')}" class="curve ${anim}" stroke="#B7791F"/><path d="${path(os, 'buyer')}" class="curve ${anim}" stroke="#1E3A5F"/>`;
+  g += `<path d="${path(os, 'seller')}" class="curve ${anim}" stroke="#3E86C4"/><path d="${path(os, 'buyer')}" class="curve ${anim}" stroke="#1E3A5F"/>`;
   if (sp != null && !(eq && sp === eq.price)) {
     const s = supplyAt(os, sp), d = demandAt(os, sp);
     g += `<line x1="${L}" x2="${W - Rr}" y1="${Y(sp)}" y2="${Y(sp)}" stroke="#6B6F76" stroke-width="2" stroke-dasharray="4 4"/>`;
-    if (s !== d) g += `<line x1="${X(Math.min(s, d))}" x2="${X(Math.max(s, d))}" y1="${Y(sp)}" y2="${Y(sp)}" stroke="${s > d ? '#B7791F' : '#1E3A5F'}" stroke-width="12" stroke-opacity=".3"/>`;
+    if (s !== d) g += `<line x1="${X(Math.min(s, d))}" x2="${X(Math.max(s, d))}" y1="${Y(sp)}" y2="${Y(sp)}" stroke="${s > d ? '#3E86C4' : '#1E3A5F'}" stroke-width="12" stroke-opacity=".3"/>`;
   }
   if (eq && eq.price != null) {
     g += `<line x1="${X(eq.volume)}" x2="${X(eq.volume)}" y1="${Y(eq.price)}" y2="${H - B}" stroke="#1F2328" stroke-width="1.5" stroke-dasharray="6 5"/>`;
@@ -241,11 +241,11 @@ function bindHover() {
     const msg = diff > 0 ? `Angebotsüberschuss ${diff} t` : diff < 0 ? `Nachfrageüberschuss ${-diff} t` : 'Angebot = Nachfrage';
     const bx = Math.min(Math.max(loc.x + 18, L + 4), W - Rr - 310), by = y + 16 + 88 < H - B ? y + 16 : Math.max(T + 4, y - 104);
     hov.innerHTML = `<line x1="${L}" x2="${W - Rr}" y1="${y}" y2="${y}" stroke="#6B6F76" stroke-width="1.5" stroke-dasharray="4 4"/>`
-      + (s !== d ? `<line x1="${X(Math.min(s, d))}" x2="${X(Math.max(s, d))}" y1="${y}" y2="${y}" stroke="${diff > 0 ? '#B7791F' : '#1E3A5F'}" stroke-width="12" stroke-opacity=".3"/>` : '')
-      + `<circle cx="${X(s)}" cy="${y}" r="7" fill="#B7791F" stroke="#fff" stroke-width="2"/><circle cx="${X(d)}" cy="${y}" r="7" fill="#1E3A5F" stroke="#fff" stroke-width="2"/>`
+      + (s !== d ? `<line x1="${X(Math.min(s, d))}" x2="${X(Math.max(s, d))}" y1="${y}" y2="${y}" stroke="${diff > 0 ? '#3E86C4' : '#1E3A5F'}" stroke-width="12" stroke-opacity=".3"/>` : '')
+      + `<circle cx="${X(s)}" cy="${y}" r="7" fill="#3E86C4" stroke="#fff" stroke-width="2"/><circle cx="${X(d)}" cy="${y}" r="7" fill="#1E3A5F" stroke="#fff" stroke-width="2"/>`
       + `<rect x="${bx}" y="${by}" width="300" height="88" rx="8" fill="#fff" stroke="#D9DCE1"/>`
       + `<text x="${bx + 14}" y="${by + 26}" font-size="18" font-weight="800" fill="#1F2328">${p} €/t</text>`
-      + `<text x="${bx + 14}" y="${by + 48}" font-size="15" fill="#B7791F" font-weight="700">Angebot ${s} t</text>`
+      + `<text x="${bx + 14}" y="${by + 48}" font-size="15" fill="#2E6FA7" font-weight="700">Angebot ${s} t</text>`
       + `<text x="${bx + 150}" y="${by + 48}" font-size="15" fill="#1E3A5F" font-weight="700">Nachfrage ${d} t</text>`
       + `<text x="${bx + 14}" y="${by + 72}" font-size="15" fill="#6B6F76">${msg} · Umsatz ${Math.min(s, d)} t</text>`;
     if (gap) gap.innerHTML = gapText(os, p);
