@@ -11,7 +11,34 @@
 <div id="localbanner"></div>
 <main class="phone" id="app"><div class="wait"><div class="spinner"></div>Lade …</div></main>
 
+<script>
+// Notbremse: Wenn das Modul gar nicht erst startet (z. B. weil auf dem Server
+// eine alte shared.js liegt), sieht man sonst ewig "Lade ...".
+window.__lbBoot = false;
+window.__lbFehler = function (titel, text) {
+  var el = document.getElementById('app') || document.body;
+  el.innerHTML = '<div class="card"><h2 style="margin-top:0">' + titel + '</h2>'
+    + '<p class="muted">' + text + '</p>'
+    + '<p><button class="full" onclick="location.reload()">Nochmal versuchen</button></p></div>';
+};
+window.addEventListener('error', function (e) {
+  if (window.__lbBoot) return;
+  var m = String((e && e.message) || '');
+  if (m.indexOf('export named') > -1 || m.indexOf('module') > -1) {
+    window.__lbFehler('App-Dateien passen nicht zusammen',
+      'Auf dem Server liegt eine andere Version als erwartet: ' + m
+      + ' \u2013 bitte alle Dateien der App neu hochladen.');
+  }
+}, true);
+setTimeout(function () {
+  if (!window.__lbBoot) {
+    window.__lbFehler('Start dauert zu lange',
+      'Die App hat sich nicht gemeldet. Pr\u00fcf die Internetverbindung; falls ein Werbe- oder Inhaltsblocker l\u00e4uft, schalte ihn f\u00fcr diese Seite aus.');
+  }
+}, 7000);
+</script>
 <script type="module">
+window.__lbBoot = true;
 import { createStore, roleForIndex, EVENTS, effective, affected, sizeLabel, orderOutcome, eur, esc, lsGet, lsSet, REF_PRICE, SCALE_MIN, SCALE_MAX } from './shared.js';
 
 const app = document.getElementById('app');
@@ -21,7 +48,19 @@ let myOrder = null, myVote = null, draft = null;          // Händler
 let spec = { b: null, s: null }, side = 'b', sdraft = {}; // Spekulanten
 let introStep = 0, introDone = false, lastPhase = null;                     // Einführung nach dem Beitreten
 
-store = await createStore();
+// Wenn Netz oder Firebase nicht erreichbar sind, nicht ewig "Lade ..." zeigen,
+// sondern nach 9 Sekunden sagen, woran es liegt.
+const mitFrist = (p, ms, grund) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(grund)), ms))]);
+function zeigeFehler(titel, text) {
+  app.innerHTML = `<div class="card"><h2 style="margin-top:0">${titel}</h2><p class="muted">${text}</p>
+    <p><button class="full" onclick="location.reload()">Nochmal versuchen</button></p></div>`;
+}
+try {
+  store = await mitFrist(createStore(), 9000, 'Firebase-Bibliothek nicht erreichbar');
+} catch (e) {
+  zeigeFehler('Keine Verbindung', 'Die B\u00f6rse l\u00e4sst sich nicht laden (' + esc(String(e.message || e)) + '). Pr\u00fcf WLAN oder mobile Daten. Falls ein Werbe- oder Inhaltsblocker l\u00e4uft, schalte ihn f\u00fcr diese Seite aus.');
+  throw e;
+}
 if (store.mode === 'local') document.getElementById('localbanner').innerHTML = '<div class="banner-local">Lokaler Testmodus</div>';
 store.onConnection(ok => { const c = document.getElementById('conn'); c.textContent = ok ? 'verbunden' : 'keine Verbindung …'; c.className = 'conn' + (ok ? '' : ' off'); });
 
@@ -36,7 +75,14 @@ function askCode() {
 
 async function start() {
   const S = 'sessions/' + code;
-  if (!(await store.get(S + '/meta'))) { app.innerHTML = `<div class="card"><h2 style="margin-top:0">Code „${esc(code)}“ nicht gefunden</h2><button class="ghost" onclick="location.href='?'">Nochmal</button></div>`; return; }
+  let meta0;
+  try {
+    meta0 = await mitFrist(store.get(S + '/meta'), 9000, 'Datenbank antwortet nicht');
+  } catch (e) {
+    zeigeFehler('Keine Verbindung zur B\u00f6rse', 'Die Daten kommen nicht an (' + esc(String(e.message || e)) + '). Pr\u00fcf das Netz und versuch es noch einmal.');
+    return;
+  }
+  if (!meta0) { app.innerHTML = `<div class="card"><h2 style="margin-top:0">Code „${esc(code)}“ nicht gefunden</h2><button class="ghost" onclick="location.href='?'">Nochmal</button></div>`; return; }
   try { pid = sessionStorage.getItem('lb-pid-' + code); } catch (e) { }
   if (!pid && store.mode !== 'local') pid = lsGet('lb-pid-' + code);
   if (pid) me = await store.get(S + '/players/' + pid);
