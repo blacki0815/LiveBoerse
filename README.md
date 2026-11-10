@@ -14,16 +14,16 @@ Jeder Mitspieler scannt einen QR-Code und bekommt eine geheime Rolle, zum Beispi
 
 ## Funktionen
 
-- **Zwei Ansichten:** `makler.html` für den Beamer, `index.html` für die Handys. Die Klasse sieht nie die Steuerung – die blendet sich unten ein, wenn die Maus bewegt wird.
-- **Vier Rollen:** Anbieter, Nachfrager, Spekulanten (kaufen *und* verkaufen, mit Lager über mehrere Runden und einem Insider-Gerücht) und ein Großkonzern mit Marktmacht.
-- **Einführung:** Nach dem Beitreten wird jedem seine Rolle in vier Schritten erklärt.
-- **Orientierung statt Raten:** Preis-Skala mit dem eigenen Limit und dem Vorjahrespreis, dazu die Balken „Chance, zum Zug zu kommen“ und „Gewinn pro Tonne“.
-- **Orderbuch wie im Schulbuch:** Preis, Angebot, Nachfrage, umsetzbare Menge – der Börsenpreis wird erst auf Knopfdruck aufgedeckt.
-- **Interaktives Diagramm:** Angebots- und Nachfragekurve als Treppenfunktion, die Vorrunde gestrichelt daneben. Mit der Maus über das Diagramm fahren zeigt für jeden Preis Angebot, Nachfrage und den Überschuss.
-- **Zehn Breaking News,** fünf für alle und fünf nur für kleine oder große Betriebe. Standardmäßig zufällig, manchmal bleibt eine Runde ruhig.
-- **Prognose-Abstimmung** vor jeder Runde und Auswertung danach.
-- **Rangliste** für Händler (Ersparnis bzw. Mehreinnahme) und Spekulanten (Depotwert).
-- **Notfallplan:** Bots füllen den Markt auf, Aufträge von Papierzetteln lassen sich eintippen, und ohne Firebase läuft alles lokal im Testmodus.
+- Zwei Ansichten: `makler.html` für den Beamer, `index.html` für die Handys. Die Klasse sieht nie die Steuerung, sie blendet sich unten ein, wenn die Maus bewegt wird.
+- Vier Rollen: Anbieter, Nachfrager, Spekulanten (kaufen *und* verkaufen, mit Lager über mehrere Runden und einem Insider-Gerücht) und ein Großkonzern mit Marktmacht.
+- Nach dem Beitreten bekommt jeder seine Rolle in vier Schritten erklärt.
+- Eine Preis-Skala zeigt das eigene Limit und den Vorjahrespreis, dazu die Balken „Chance, zum Zug zu kommen“ und „Gewinn pro Tonne“. Damit muss niemand blind raten.
+- Das Orderbuch steht da wie im Schulbuch: Preis, Angebot, Nachfrage, umsetzbare Menge. Der Börsenpreis wird erst auf Knopfdruck aufgedeckt.
+- Angebots- und Nachfragekurve als Treppenfunktion, die Vorrunde gestrichelt daneben. Mit der Maus über das Diagramm fahren zeigt für jeden Preis Angebot, Nachfrage und den Überschuss.
+- Zehn Breaking News, fünf für alle und fünf nur für kleine oder große Betriebe. Standardmäßig zufällig, manchmal bleibt eine Runde ruhig.
+- Prognose-Abstimmung vor jeder Runde, Auswertung danach.
+- Rangliste für Händler (Ersparnis bzw. Mehreinnahme) und Spekulanten (Depotwert).
+- Für den Notfall: Bots füllen den Markt auf, Aufträge von Papierzetteln lassen sich eintippen, und ohne Firebase läuft alles lokal im Testmodus.
 
 ## Ausprobieren
 
@@ -126,7 +126,7 @@ Es werden keine personenbezogenen Daten erhoben. Die Teilnehmer bekommen erfunde
 
 ## Didaktischer Hintergrund
 
-Die Simulation deckt das Kapitel „Markt und Preis“ ab: Marktformen und Marktmacht, den vollkommenen Markt am Beispiel der Börse, das Zustandekommen des Gleichgewichtspreises, Anpassungsprozesse bei Überschüssen und die Verschiebung der Kurven. Das Format geht auf die Markt-Experimente von **Vernon Smith** zurück, für die er 2002 den Wirtschafts-Nobelpreis erhielt: Auch unter Laborbedingungen finden Märkte ihr Gleichgewicht erstaunlich schnell.
+Die Simulation deckt das Kapitel „Markt und Preis“ ab: Marktformen und Marktmacht, den vollkommenen Markt am Beispiel der Börse, das Zustandekommen des Gleichgewichtspreises, Anpassungsprozesse bei Überschüssen und die Verschiebung der Kurven. Das Format geht auf die Markt-Experimente von **Vernon Smith** zurück, für die er 2002 den Wirtschafts-Nobelpreis erhielt. Schon nach wenigen Runden stellte sich dort ein Preis nahe am theoretischen Gleichgewicht ein, obwohl niemand die Pläne der anderen kannte.
 
 ## Lizenz
 
