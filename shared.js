@@ -223,6 +223,35 @@ export function clear(orders) {
   return { price: P, volume: V, rows, fills };
 }
 
+// Was ist mit meinem Auftrag passiert? (liefert auch den Erklärtext fürs Handy)
+export function orderOutcome({ role, myPrice, qty, price, filled }) {
+  const buyer = role === 'buyer';
+  if (price == null) return { status: 'nodeal', text: 'Es kam kein Handel zustande.' };
+  if (buyer ? myPrice < price : myPrice > price) {
+    return {
+      status: 'out',
+      text: buyer
+        ? `Nicht ausgeführt: Du wolltest höchstens ${myPrice} € zahlen, der Börsenpreis liegt mit ${price} € darüber.`
+        : `Nicht ausgeführt: Du wolltest mindestens ${myPrice} € haben, der Börsenpreis liegt mit ${price} € darunter.`
+    };
+  }
+  if (!filled) {
+    return {
+      status: 'rationed',
+      text: buyer
+        ? `Leer ausgegangen: Dein Gebot lag genau auf dem Börsenpreis von ${price} €. Bei diesem Preis wollten mehr kaufen als verkauft wurde – zum Zug kamen zuerst die, die mehr geboten haben, danach die, die früher abgegeben haben.`
+        : `Leer ausgegangen: Dein Mindestpreis lag genau auf dem Börsenpreis von ${price} €. Bei diesem Preis wurde mehr angeboten als nachgefragt – zum Zug kamen zuerst die, die günstiger angeboten haben, danach die, die früher abgegeben haben.`
+    };
+  }
+  if (filled < qty) {
+    return {
+      status: 'partial',
+      text: `Teilweise ausgeführt: ${filled} von ${qty} t zu je ${price} €. Beim Börsenpreis war ${buyer ? 'die Nachfrage größer als das Angebot' : 'das Angebot größer als die Nachfrage'}, deshalb wurde die Restmenge aufgeteilt.`
+    };
+  }
+  return { status: 'full', text: `Ausgeführt: ${filled} t zu je ${price} €.` };
+}
+
 // Gewinn relativ zur geheimen Grenze (Käufer: Ersparnis, Verkäufer: Mehreinnahme)
 export function gainFor(role, value, price, filled) {
   if (!filled || price == null) return 0;
