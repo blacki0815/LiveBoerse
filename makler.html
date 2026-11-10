@@ -35,7 +35,16 @@
 import { createStore, roleForIndex, EVENTS, effective, listOrders, niceStep, supplyAt, demandAt, bookTable, clear, gainFor, eur, esc, lsGet, lsSet } from './shared.js';
 
 const $ = id => document.getElementById(id);
-const store = await createStore();
+const store = await Promise.race([
+  createStore(),
+  new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase nicht erreichbar')), 9000))
+]).catch(e => {
+  document.body.insertAdjacentHTML('afterbegin',
+    '<div style="position:fixed;inset:0;z-index:99;background:#fff;display:flex;align-items:center;justify-content:center;'
+    + 'font:600 1.4rem Arial;color:#1F2328;text-align:center;padding:5vw">Keine Verbindung zur Datenbank.<br>'
+    + '<span style="font-weight:400;font-size:1rem;color:#6B6F76">Netz pr\u00fcfen und Seite neu laden. Ohne Netz l\u00e4uft nur der lokale Testmodus.</span></div>');
+  throw e;
+});
 if (store.mode === 'local') $('localbanner').innerHTML = '<div class="banner-local">Lokaler Testmodus – für echte Handys Firebase eintragen (README)</div>';
 store.onConnection(ok => { $('conn').textContent = ok ? 'verbunden' : 'keine Verbindung …'; $('conn').className = 'conn' + (ok ? '' : ' off'); });
 
