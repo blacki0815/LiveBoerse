@@ -190,6 +190,11 @@ function explain(bid, eff, isBuyer) {
 const total = () => Object.values(results).reduce((s, r) => s + ((r.gains || {})[pid] || 0), 0);
 const lastPrice = () => Object.keys(results).map(Number).sort((a, b) => b - a).map(k => results[k].price).find(p => p != null);
 
+// Der Knopf erscheint erst, wenn die Einführung einmal komplett durchgeklickt wurde
+const introBtn = () => introDone
+  ? '<button class="linkbtn" id="showIntro">Rolle nochmal erklären</button>'
+  : '';
+
 function roleCard(eff) {
   const r = me.role;
   const lab = r === 'buyer' ? 'KÄUFER' : r === 'spec' ? 'SPEKULANT' : (me.mega ? 'VERKÄUFER · KONZERN' : 'VERKÄUFER');
@@ -198,7 +203,7 @@ function roleCard(eff) {
     return `<div class="card"><div class="role"><div><div class="lab spec">${lab}</div><h2>${esc(me.name)}</h2></div>
       <div class="score">Depotwert<b>${eur((me.cash || 0) + (me.inv || 0) * lp)}</b></div></div>
       <div class="limit"><div><div class="k">Lager</div><div class="v">${me.inv || 0} t</div></div><div><div class="k">Kasse</div><div class="v">${eur(me.cash || 0)}</div></div></div>
-      <button class="linkbtn" id="showIntro">Rolle nochmal erklären</button></div>`;
+      ${introBtn()}</div>`;
   }
   const t = total();
   return `<div class="card"><div class="role"><div><div class="lab ${r}">${lab}</div><h2>${esc(me.name)}</h2></div>
@@ -206,7 +211,7 @@ function roleCard(eff) {
     <div class="limit"><div><div class="k">${r === 'buyer' ? 'Du willst kaufen' : 'Du willst verkaufen'}</div><div class="v">${eff.qty} t</div></div>
     <div class="secret"><div class="k">${r === 'buyer' ? 'Höchstpreis (geheim)' : 'Mindestpreis (geheim)'}</div><div class="v">${eff.value} €/t</div></div></div>
     <p class="ref">${sizeLabel(me)} · ${standing(eff).t}<br>${refLine()}</p>
-    <button class="linkbtn" id="showIntro">Rolle nochmal erklären</button></div>`;
+    ${introBtn()}</div>`;
 }
 
 function newsCard(ev, hit) {
